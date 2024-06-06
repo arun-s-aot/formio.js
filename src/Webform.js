@@ -41,7 +41,7 @@ function getOptions(options) {
     alwaysDirty: false,
     saveDraftThrottle: 5000,
     display: 'form',
-    cdnUrl: Formio.cdn.baseUrl
+    cdnUrl: Formio.cdn ? Formio.cdn.baseUrl : 'https://cdn.form.io'
   });
   if (!options.events) {
     options.events = new EventEmitter();
