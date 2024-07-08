@@ -71,15 +71,18 @@
             default:
               break;
           }
-        console.log('existingCustomConditional->',existingCustomConditional)
-          if(existingCustomConditional){
-            if(existingCustomConditional.endsWith(';'))
-              fullCondition = existingCustomConditional.slice(0, -1) + " && "+ condition
-            else 
-              fullCondition = existingCustomConditional + " && "+ condition
+        console.log('condition->',condition)
+        console.log('existingCustomConditional->',existingCustomConditional);
+          if(existingCustomConditional) {
+              if(!existingCustomConditional.includes(condition)){
+                if(existingCustomConditional.endsWith(';'))
+                  fullCondition = existingCustomConditional.slice(0, -1) + " && "+ condition
+                else 
+                  fullCondition = existingCustomConditional + " && "+ condition
+              } 
           } else {
-            fullCondition = `show = ${condition}`
-          }  
+                fullCondition = `show = ${condition}`
+          } 
         
           return fullCondition;
         }
@@ -90,5 +93,13 @@
     <div id='builder'></div>
     <div id='json-schema'></div>
 </body>
+
+<style>
+  #json-schema{
+    margin: 3rem;
+    padding: 3rem;
+    border: 2px solid black;
+  }
+</style>
 
 </html>
