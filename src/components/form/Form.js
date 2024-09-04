@@ -500,7 +500,13 @@ export default class FormComponent extends Component {
     }
     else if (this.formSrc) {
       this.subFormLoading = true;
-      return (new Formio(this.formSrc)).loadForm({ params: { live: 1 } })
+      const options = this.root?.formio?.base && this.root?.formio?.projectUrl
+        ? {
+            base: this.root.formio.base,
+            project: this.root.formio.projectUrl,
+          }
+        : {};
+      return (new Formio(this.formSrc, options)).loadForm({ params: { live: 1 } })
         .then((formObj) => {
           this.formObj = formObj;
           if (this.options.pdf && this.component.useOriginalRevision) {
@@ -697,22 +703,33 @@ export default class FormComponent extends Component {
     return changed;
   }
 
+  onSetSubFormValue(submission, flags) {
+    this.subForm.setValue(submission, flags);
+  }
+
   setSubFormValue(submission, flags) {
     const shouldLoadSubmissionById = submission
       && submission._id
       && this.subForm.formio
       && _.isEmpty(submission.data);
+    const shouldLoadDraftById = this.options.saveDraft && _.isEmpty(submission.data) && _.get(this.subForm, 'submission._id');
 
-    if (shouldLoadSubmissionById) {
+    if (shouldLoadSubmissionById || shouldLoadDraftById) {
       const formId = submission.form || this.formObj.form || this.component.form;
-      const submissionUrl = `${this.subForm.formio.formsUrl}/${formId}/submission/${submission._id}`;
-      this.subForm.setUrl(submissionUrl, this.options);
+      const submissionUrl = `${this.subForm.formio.formsUrl}/${formId}/submission/${submission._id || this.subForm.submission._id}`;
+      const options = this.root?.formio?.base && this.root?.formio?.projectUrl
+      ? {
+          base: this.root.formio.base,
+          project: this.root.formio.projectUrl,
+        }
+      : {};
+      this.subForm.setUrl(submissionUrl, { ...this.options, ...options });
       this.subForm.loadSubmission().catch((err) => {
         console.error(`Unable to load subform submission ${submission._id}:`, err);
       });
     }
     else {
-      this.subForm.setValue(submission, flags);
+      this.onSetSubFormValue(submission, flags);
     }
   }
 

@@ -688,14 +688,7 @@ export default class Webform extends NestedDataComponent {
       return NativePromise.resolve();
     }
 
-    // Allow the form to provide component overrides.
-    if (form && form.settings && form.settings.components) {
-      this.options.components = form.settings.components;
-    }
-
-    if (form && form.properties) {
-      this.options.properties = form.properties;
-    }
+    this.setFormOptions(form);
 
     if ('schema' in form && compareVersions(form.schema, '1.x') > 0) {
       this.ready.then(() => {
@@ -742,6 +735,22 @@ export default class Webform extends NestedDataComponent {
     });
   }
 
+   /**
+   * Sets options from the JSON schema .
+   *
+   * @param {Object} form - The JSON schema of the form.
+   * @returns {void}
+   */
+  setFormOptions(form) {
+       // Allow the form to provide component overrides.
+      if (form && form.settings && form.settings.components) {
+        this.options.components = form.settings.components;
+      }
+
+      if (form && form.properties) {
+        this.options.properties = form.properties;
+      }
+  }
   /**
    * Gets the form object.
    *
@@ -794,6 +803,18 @@ export default class Webform extends NestedDataComponent {
     this.setSubmission(submission);
   }
 
+    /**
+   * @param submission
+   * @param flags
+   * @return {void}
+   */
+  onSetSubmission(submission, flags = {}) {
+    this.submissionSet = true;
+    this.triggerChange(flags);
+    this.emit('beforeSetSubmission', submission);
+    this.setValue(submission, flags);
+  }
+
   /**
    * Sets a submission and returns the promise when it is ready.
    * @param submission
@@ -813,10 +834,7 @@ export default class Webform extends NestedDataComponent {
             ...resolveFlags
           };
         }
-        this.submissionSet = true;
-        this.triggerChange(flags);
-        this.emit('beforeSetSubmission', submission);
-        this.setValue(submission, flags);
+        this.onSetSubmission(submission, flags);
         return this.submissionReadyResolve(submission);
       },
       (err) => this.submissionReadyReject(err)
@@ -880,7 +898,8 @@ export default class Webform extends NestedDataComponent {
     formio.loadSubmissions({
       params: {
         state: 'draft',
-        owner: userId
+        owner: userId,
+        sort: '-created'
       }
     }).then(submissions => {
       if (submissions.length > 0 && !this.options.skipDraftRestore) {
@@ -923,7 +942,9 @@ export default class Webform extends NestedDataComponent {
       submission = { data: {} };
     }
     // Metadata needs to be available before setValue
-    this._submission.metadata = submission.metadata || {};
+    this._submission.metadata = submission.metadata
+      ? _.cloneDeep(submission.metadata)
+      : {};
     this.editing = !!submission._id;
 
     // Set the timezone in the options if available.
@@ -1394,7 +1415,12 @@ export default class Webform extends NestedDataComponent {
       this.customErrors = this.customErrors.filter(err => err.component && err.component !== changed.component.key);
     }
 
-    super.onChange(flags, true);
+    if (this.parent?.subForm === this) {
+      super.onChange({ ...flags, modified }, false);
+    }
+    else {
+      super.onChange(flags, true);
+    }
     const value = _.clone(this.submission);
     flags.changed = value.changed = changed;
     flags.changes = changes;

@@ -1,7 +1,7 @@
 {
-  "coverage": "6.37%",
-  "expectCount": 1036,
-  "actualCount": 66,
+  "coverage": "5.81%",
+  "expectCount": 1014,
+  "actualCount": 59,
   "files": {
     "src/CDN.js": {
       "expectCount": 14,
@@ -39,29 +39,6 @@
         17,
         25,
         29
-      ]
-    },
-    "src/Form.js": {
-      "expectCount": 24,
-      "actualCount": 7,
-      "undocumentLines": [
-        8,
-        37,
-        38,
-        39,
-        42,
-        44,
-        45,
-        64,
-        97,
-        119,
-        143,
-        167,
-        200,
-        208,
-        244,
-        281,
-        292
       ]
     },
     "src/FormBuilder.js": {
@@ -452,6 +429,14 @@
       "actualCount": 0,
       "undocumentLines": [
         6
+      ]
+    },
+    "src/components/datagrid/fixtures/comp-with-reorder.js": {
+      "expectCount": 2,
+      "actualCount": 0,
+      "undocumentLines": [
+        1,
+        65
       ]
     },
     "src/components/datamap/DataMap.form.js": {

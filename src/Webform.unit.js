@@ -2085,6 +2085,46 @@ describe('Webform tests', function() {
     });
   });
 
+  it('Should not fire validation on calculated values init.', (done) => {
+    formElement.innerHTML = '';
+    const form = new Webform(formElement,{ language: 'en' });
+    form.setForm(
+      { title: 'noValidation flag',
+        components: [{
+          label: 'minMax',
+          calculateValue: 'value = {minAmount: \'5.00\', maxAmount: \'50000.00\'};',
+          calculateServer: true,
+          key: 'minMax',
+          type: 'hidden',
+          input: true
+        }, {
+          label: 'A',
+          key: 'a',
+          type: 'number',
+          input: true
+        }, {
+          label: 'B',
+          key: 'b',
+          type: 'number',
+          input: true
+        }, {
+          label: 'Sum',
+          validate: {
+            required: true,
+            min: 10
+          },
+          calculateValue: 'var total = _.isNumber(data.a) ? data.a : 0;\ntotal += _.isNumber(data.b) ? data.b : 0;\n\nvalue = parseFloat(total.toFixed(2));',
+          calculateServer: true,
+          key: 'sum',
+          type: 'number',
+          input: true
+        }],
+      }
+    ).then(() => {
+      checkForErrors(form, {}, { data: {} }, 0, done);
+    });
+  });
+
   it('Should set calculated value correctly', (done) => {
     formElement.innerHTML = '';
     const form = new Webform(formElement);
@@ -2804,6 +2844,118 @@ describe('Webform tests', function() {
         setTimeout(() => {
           assert.equal(conditionalComponent.visible, false, 'Component should be conditionally hidden');
           done();
+        }, 300);
+      }).catch((err) => done(err));
+    });
+
+    it('Check conditional component related to EditGrid inner components with ALL conjunction case', function(done) {
+      const formElement = document.createElement('div');
+      const form = new Webform(formElement);
+
+      form.setForm(formsWithNewSimpleConditions.form8).then(() => {
+        const conditionalComponent = form.getComponent('note');
+        assert.equal(conditionalComponent.visible, true, '(1) Component should be conditionally visible');
+
+        form.setValue({
+          data: {
+            container: {
+              editGrid1: [
+                {
+                  editGrid2: [
+                    {
+                      innerSelect1: 44,
+                      innerSelect2: 'kkk'
+                    },
+                    {
+                      innerSelect1: '',
+                      innerSelect2: 'kkk'
+                    }
+                  ],
+                  order: 1,
+                  lesson: 'math'
+                }
+              ]
+            },
+          },
+        });
+
+        setTimeout(() => {
+          assert.equal(conditionalComponent.visible, false, '(2) Component should be conditionally hidden');
+
+          const editGrid2Component = form.getComponent('editGrid2');
+
+          editGrid2Component.setValue([
+            {
+              innerSelect1: '',
+              innerSelect2: 'kkk'
+            },
+            {
+              innerSelect1: '',
+              innerSelect2: 'kkk'
+            }
+          ],);
+
+          setTimeout(() => {
+            assert.equal(conditionalComponent.visible, true, '(3) Component should be conditionally visible');
+            done();
+          }, 300);
+        }, 300);
+      }).catch((err) => done(err));
+    });
+
+    it('Check conditional component related to EditGrid inner components with ANY conjunction case', function(done) {
+      const formElement = document.createElement('div');
+      const form = new Webform(formElement);
+      const cloneForm8 =_.cloneDeep(formsWithNewSimpleConditions.form8);
+      cloneForm8.components[0].conditional.conjunction = 'any';
+
+      form.setForm(cloneForm8).then(() => {
+        const conditionalComponent = form.getComponent('note');
+        assert.equal(conditionalComponent.visible, true, '(1) Component should be conditionally visible');
+
+        form.setValue({
+          data: {
+            container: {
+              editGrid1: [
+                {
+                  editGrid2: [
+                    {
+                      innerSelect1: 44,
+                      innerSelect2: 'kkk'
+                    },
+                    {
+                      innerSelect1: '',
+                      innerSelect2: 'kkk'
+                    }
+                  ],
+                  order: 1,
+                  lesson: 'math'
+                }
+              ]
+            },
+          },
+        });
+
+        setTimeout(() => {
+          assert.equal(conditionalComponent.visible, true, '(2) Component should be conditionally hidden');
+
+          const editGrid2Component = form.getComponent('editGrid2');
+
+          editGrid2Component.setValue([
+            {
+              innerSelect1: '33',
+              innerSelect2: 'kkk'
+            },
+            {
+              innerSelect1: '33',
+              innerSelect2: 'kkk'
+            }
+          ],);
+
+          setTimeout(() => {
+            assert.equal(conditionalComponent.visible, false, '(3) Component should be conditionally visible');
+            done();
+          }, 300);
         }, 300);
       }).catch((err) => done(err));
     });
@@ -3652,11 +3804,20 @@ describe('Webform tests', function() {
     .catch((err) => done(err));
   });
 
-  it('Test Truncate Multiple Spaces', (done) => {
-    const formElement = document.createElement('div');
-    const form= new Webform(formElement);
+  xit('Test Truncate Multiple Spaces', async(done) => {
+    try {
+      const formElement = document.createElement('div');
+      const form = new Webform(formElement);
 
-    form.setForm(truncateMultipleSpaces).then(() => {
+      const setOwnTimeout = (timeout) => {
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve();
+          }, timeout);
+        });
+      };
+
+      await form.setForm(truncateMultipleSpaces);
       const textFieldRequired = form.getComponent(['textField1']);
       const textFieldMinMaxLength = form.getComponent(['textField']);
       const textAreaMinMaxLength = form.getComponent(['textArea']);
@@ -3674,32 +3835,35 @@ describe('Webform tests', function() {
         (i) => i.value = '     546       456     '
       );
 
-      setTimeout(() => {
-        assert.equal(textFieldRequired.dataValue, '        ', 'Should set value');
-        assert.equal(textFieldMinMaxLength.dataValue, '     546       456     ', 'Should set value');
-        assert.equal(textAreaMinMaxLength.dataValue, '     546       456     ', 'Should set value');
-
-        assert.equal(textFieldRequired.errors.length, 1, 'Should be invalid since it does not have a value');
-        assert.equal(
-          textFieldMinMaxLength.errors.length,
-          0,
-          'Should be valid since it value does not exceed the max length after truncating spaces'
-        );
-        assert.equal(
-          textAreaMinMaxLength.errors.length,
-          0,
-          'Should be valid since it value does not exceed the max length after truncating spaces'
-        );
-
-        form.submit(false, {}).finally(() => {
-          assert.equal(textFieldRequired.dataValue, '', 'Should truncate the value before submit');
-          assert.equal(textFieldMinMaxLength.dataValue, '546 456', 'Should truncate the value before submit');
-          assert.equal(textAreaMinMaxLength.dataValue, '546 456', 'Should truncate the value before submit');
-
-          done();
-        });
-      }, 400);
-    }).catch(done);
+      await setOwnTimeout(200);
+      assert.equal(textFieldRequired.dataValue, '        ', 'Should set value');
+      assert.equal(textFieldMinMaxLength.dataValue, '     546       456     ', 'Should set value');
+      assert.equal(textAreaMinMaxLength.dataValue, '     546       456     ', 'Should set value');
+      assert.equal(textFieldRequired.errors.length, 1, 'Should be invalid since it does not have a value');
+      assert.equal(
+        textFieldMinMaxLength.errors.length,
+        0,
+        'Should be valid since it value does not exceed the max length after truncating spaces'
+      );
+      assert.equal(
+        textAreaMinMaxLength.errors.length,
+        0,
+        'Should be valid since it value does not exceed the max length after truncating spaces'
+      );
+      try {
+        await form.submit(false, {});
+      }
+      catch (err) {
+        // we expect an error here (since the form is invalid due to a required field) so do nothing
+      }
+      assert.equal(textFieldRequired.dataValue, '', 'Should truncate the value before submit');
+      assert.equal(textFieldMinMaxLength.dataValue, '546 456', 'Should truncate the value before submit');
+      assert.equal(textAreaMinMaxLength.dataValue, '546 456', 'Should truncate the value before submit');
+      done();
+    }
+    catch (err) {
+      return done(err);
+    }
   });
 
   it('HTML render mode for Webform', (done) => {

@@ -4,6 +4,42 @@ All notable changes to this project will be documented in this file
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [Unreleased: 4.19.6-rc.1]
+### Changed
+ - FIO-7478: fixed an issue where select component displays incorrect label after datagrid rows reorder
+ - FIO-7835: changes required for eSignature
+ - FIO-8389 | FIO-8403 | FIO-8414: Fixes 4.x validations and conditionals for array data components
+   
+## 4.19.5
+### Changed
+ - Official Release
+
+## 4.19.5-rc.1
+### Changed
+ - FIO-8510: update webform change event to bubble
+ - Remove *zoom (IE7 hack)
+
+## 4.19.4
+### Changed
+ - Official Release
+
+## 4.19.4-rc.3
+### Changed
+ - FIO-8493: Added null check for this.root in builder mode
+
+## 4.19.4-rc.2
+### Changed
+ - FIO-8402: fixed an issue where Validation Triggering on initial Form load
+
+## 4.19.4-rc.1
+### Changed
+ - FIO-7395: Fixed the issue with loading nested form
+ - FIO-8433 fixed restore draft for nested forms
+ - FIO-8281: fixed selectData property for multiple select component
+
+### Changed
+ - FIO-8199: Fixes an issue where Checkbox does not have id and for attributes
+   
 ## 4.19.3
 ### Changed
  - Official Release
