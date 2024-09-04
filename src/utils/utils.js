@@ -282,7 +282,6 @@ export function checkAdvancedConditional(trigger, advanced, row, data, form, var
   let custom = '';
   advanced.forEach((condition) => {
     custom = createScriptFromAdvancedConditions(condition.whenAdvanced, condition.operatorAdvanced, condition.eqAdvanced,trigger.whenAndOr,custom);
-    console.log(custom);
   });
   if (typeof custom === 'string') {
     custom = `var ${variable} = true; ${custom}; return ${variable};`;
@@ -346,8 +345,6 @@ function createScriptFromAdvancedConditions(component, operator, value,whenAndOr
     default:
       break;
   }
-  console.log('condition->',condition);
-  console.log('existingCustomConditional->',existingCustomConditional);
     if (existingCustomConditional) {
         if (!existingCustomConditional.includes(condition)) {
           if (existingCustomConditional.endsWith(';')) {
@@ -401,7 +398,6 @@ export const setComparisonConditionsOnComponentSelection = (componentDataType) =
       conditionalComparisonOptions = [...conditionalsDefault];
       break;
   }
-  console.log('conditionalComparisonOptions', conditionalComparisonOptions);
 };
 
 // Getter method to filter comparison options depended on seleted component data type
