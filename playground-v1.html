@@ -14,78 +14,11 @@
         
                       form.on('change', function(event) {
                         console.log('Current JSON:', form.schema.components); 
-                        let updatedJSON = form.schema.components;
-        console.log('before JSON-->',updatedJSON);
-                        updatedJSON = iterateAndSetLogic(form.schema.components)
-        console.log('after JSON-->',updatedJSON);
                           Formio.createForm(document.getElementById('json-schema'), {components: form.schema.components});
                       });
-        
-        
-        
                     });
-        
-        
          })
-        
-        function iterateAndSetLogic(components) {
-          console.log(components)
-          components.forEach((comp) => {
-             comp?.conditional?.conditions.forEach((codition) => {
-                comp.customConditional = createCondition(codition.component, codition.operator, codition.value,comp.customConditional)
-              console.log(comp.customConditional)
-             })
-              if(comp.customConditional && !comp.customConditional.endsWith(';'))
-                comp.customConditional = comp.customConditional.concat(';');
-          })
-        
-          return components;
-        }
-        
-        
-         function createCondition(component, operator, value,existingCustomConditional) {
-          let condition = "";
-          let fullCondition = existingCustomConditional ? existingCustomConditional : ""
-          switch(operator) {
-            case "isEqual":
-              condition = `data.${component} && data.${component} == '${value}'`;
-              break;
-            case "isNotEqual":
-              condition = `data.${component} && data.${component} != '${value}'`;
-              break;
-            case "isEmpty":
-              condition = `!data.${component}`;
-              break;
-            case "isNotEmpty":
-              condition = `!!data.${component}`;
-              break;
-            case "includes":
-              condition = `data.${component} && data.${component}.includes('${value}')`;
-              break;
-            case "notIncludes":
-              condition = `data.${component} && !data.${component}.includes('${value}')`;
-              break;
-            case "endsWith":
-              condition = `data.${component} && data.${component}.endsWith('${value}')`;
-              break;
-            default:
-              break;
-          }
-        console.log('condition->',condition)
-        console.log('existingCustomConditional->',existingCustomConditional);
-          if(existingCustomConditional) {
-              if(!existingCustomConditional.includes(condition)){
-                if(existingCustomConditional.endsWith(';'))
-                  fullCondition = existingCustomConditional.slice(0, -1) + " && "+ condition
-                else 
-                  fullCondition = existingCustomConditional + " && "+ condition
-              } 
-          } else {
-                fullCondition = `show = ${condition}`
-          } 
-        
-          return fullCondition;
-        }
+      
     </script>
 </head>
 

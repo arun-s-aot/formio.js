@@ -38,6 +38,9 @@ jsonLogic.add_operation('relativeMaxDate', (relativeMaxDate) => {
 
 export { jsonLogic, moment, ConditionOperators };
 
+// To set the dropdown options for conditional comparison options depended on form component selection in Advanced Logic
+let conditionalComparisonOptions = [];
+
 function setPathToComponentAndPerentSchema(component) {
   component.path = getComponentPath(component);
   const dataParent = getDataParentComponent(component);
@@ -262,6 +265,150 @@ export function checkCalculated(component, submission, rowData) {
   }
 }
 
+/**
+ * Check if a advanced conditional evaluates to true.
+ *
+ * @param trigger
+ * @param advanced
+ * @param row
+ * @param data
+ * @param form
+ * @param variable
+ * @param onError
+ * @param instance
+ * @returns {boolean}
+ */
+export function checkAdvancedConditional(trigger, advanced, row, data, form, variable, onError, instance) {
+  let custom = '';
+  advanced.forEach((condition) => {
+    custom = createScriptFromAdvancedConditions(condition.whenAdvanced, condition.operatorAdvanced, condition.eqAdvanced,trigger.whenAndOr,custom);
+    console.log(custom);
+  });
+  if (typeof custom === 'string') {
+    custom = `var ${variable} = true; ${custom}; return ${variable};`;
+  }
+  const value = (instance && instance.evaluate) ?
+    instance.evaluate(custom, { row, data, form }) :
+    evaluate(custom, { row, data, form });
+  if (value === null) {
+    return onError;
+  }
+  return value;
+}
+
+/**
+ * To create javascript from advanced conditions selections
+ *
+ * @param component
+ * @param operator
+ * @param value
+ * @param whenAndOr
+ * @param existingCustomConditional
+ * @returns {string}
+ */
+function createScriptFromAdvancedConditions(component, operator, value,whenAndOr,existingCustomConditional) {
+  let condition = '';
+  let fullCondition = existingCustomConditional ? existingCustomConditional : '';
+  switch (operator) {
+    case 'isEqual':
+      condition = `(data.${component} && data.${component} == '${value}')`;
+      break;
+    case 'isNotEqual':
+      condition = `(data.${component} && data.${component} != '${value}')`;
+      break;
+    case 'isEmpty':
+      condition = `!data.${component}`;
+      break;
+    case 'isNotEmpty':
+      condition = `!!data.${component}`;
+      break;
+    case 'includes':
+      condition = `(data.${component} && data.${component}.includes('${value}'))`;
+      break;
+    case 'notIncludes':
+      condition = `(data.${component} && !data.${component}.includes('${value}'))`;
+      break;
+    case 'endsWith':
+      condition = `(data.${component} && data.${component}.endsWith('${value}'))`;
+      break;
+    case 'lessThan':
+      condition = `(data.${component} && data.${component} < '${value}')`;
+      break;
+    case 'greaterThan':
+      condition = `(data.${component} && data.${component} > '${value}')`;
+      break;
+    case 'lessThanOrEqual':
+      condition = `(data.${component} && data.${component} <= '${value}')`;
+      break;
+    case 'greaterThanOrEqual':
+      condition = `(data.${component} && data.${component} >= '${value}')`;
+      break;
+    default:
+      break;
+  }
+  console.log('condition->',condition);
+  console.log('existingCustomConditional->',existingCustomConditional);
+    if (existingCustomConditional) {
+        if (!existingCustomConditional.includes(condition)) {
+          if (existingCustomConditional.endsWith(';')) {
+            fullCondition = `${existingCustomConditional.slice(0, -1)} ${whenAndOr} ${condition}`;
+          }
+          else {
+            fullCondition = `${existingCustomConditional} ${whenAndOr} ${condition}`;
+          }
+        }
+    }
+    else {
+          fullCondition = `result = ${condition}`;
+    }
+    return fullCondition;
+}
+
+/**
+ * Function to update the conditionalComparisonOptions based on component data type
+ *
+ * @param componentDataType
+ */
+export const setComparisonConditionsOnComponentSelection = (componentDataType) => {
+  const conditionalsDefault = [
+    { 'value': 'isEqual', 'label': 'is Equal To' },
+    { 'value': 'isNotEqual', 'label': 'is Not Equal To' },
+    { 'value': 'isEmpty', 'label': 'is Empty' },
+    { 'value': 'isNotEmpty', 'label': 'is Not Empty' }
+  ];
+
+  const conditionalsForText = [
+    { 'value': 'includes', 'label': 'includes' },
+    { 'value': 'notIncludes', 'label': 'not Includes' },
+    { 'value': 'endsWith', 'label': 'ends With' }
+  ];
+
+  const conditionalsForNumber = [
+    { 'value': 'lessThan', 'label': 'Less Than' },
+    { 'value': 'greaterThan', 'label': 'Greater Than' },
+    { 'value': 'lessThanOrEqual', 'label': 'Less Than Or Equal To' },
+    { 'value': 'greaterThanOrEqual', 'label': 'Greater Than Or Equal To' }
+  ];
+
+  switch (componentDataType) {
+    case 'textfield':
+      conditionalComparisonOptions = [...conditionalsDefault, ...conditionalsForText];
+      break;
+    case 'number':
+      conditionalComparisonOptions = [...conditionalsDefault, ...conditionalsForNumber];
+      break;
+    default:
+      conditionalComparisonOptions = [...conditionalsDefault];
+      break;
+  }
+  console.log('conditionalComparisonOptions', conditionalComparisonOptions);
+};
+
+// Getter method to filter comparison options depended on seleted component data type
+export const getConditionalComparisonOptions = () => {
+  return conditionalComparisonOptions;
+};
+
 export function getComponentActualValue(compPath, data, row) {
   let value = null;
 
@@ -389,6 +536,8 @@ export function checkTrigger(component, trigger, row, data, form, instance) {
       return checkCustomConditional(component, trigger.javascript, row, data, form, 'result', false, instance);
     case 'json':
       return checkJsonConditional(component, trigger.json, row, data, form, false);
+    case 'advanced':
+      return checkAdvancedConditional(trigger, trigger.advanced, row, data, form, 'result', false, instance);
   }
   // If none of the types matched, don't fire the trigger.
   return false;
@@ -1167,6 +1316,7 @@ export function getContextComponents(context, excludeNested, excludedTypes = [])
       values.push({
         label: `${component.label || component.key} (${path})`,
         value: path,
+        dataType: component.type
       });
     }
   });
@@ -1594,3 +1744,4 @@ export function isSelectResourceWithObjectValue(comp = {}) {
   const { reference, dataSrc, valueProperty } = comp;
   return reference || (dataSrc === 'resource' && (!valueProperty || valueProperty === 'data'));
 }
+

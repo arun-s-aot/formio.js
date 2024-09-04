@@ -1,5 +1,49 @@
 import EditFormUtils from './utils';
-import { getContextComponents } from '../../../../utils/utils';
+import { getContextComponents, getConditionalComparisonOptions, setComparisonConditionsOnComponentSelection } from '../../../../utils/utils';
+
+// var conditionalComparisonOptions = [];
+// const conditionalsDefault = [
+//   { 'value': 'isEqual', 'label': 'is Equal To' },
+//   { 'value': 'isNotEqual', 'label': 'is Not Equal To' },
+//   { 'value': 'isEmpty', 'label': 'is Empty' },
+//   { 'value': 'isNotEmpty', 'label': 'is Not Empty' }
+// ];
+
+// const conditionalsForText = [
+//   { 'value': 'includes', 'label': 'includes' },
+//   { 'value': 'notIncludes', 'label': 'not Includes' },
+//   { 'value': 'endsWith', 'label': 'ends With' }
+// ];
+
+// const conditionalsForNumber = [
+//   { 'value': 'lessThan', 'label': 'Less Than' },
+//   { 'value': 'greaterThan', 'label': 'Greater Than' },
+//   { 'value': 'lessThanOrEqual', 'label': 'Less Than Or Equal To' },
+//   { 'value': 'greaterThanOrEqual', 'label': 'Greater Than Or Equal To' }
+// ];
+
+// const changeConditionsOnData = (componentValue) => {
+//   switch (componentValue) {
+//     case 'textfield':
+//       conditionalComparisonOptions = [...conditionalsDefault, ...conditionalsForText];
+//       break;
+//     case 'number':
+//       conditionalComparisonOptions = [...conditionalsDefault, ...conditionalsForNumber];
+//       break;
+//     default:
+//       conditionalComparisonOptions = [...conditionalsDefault];
+//       break;
+//   }
+//   console.log('conditionalComparisonOptions', conditionalComparisonOptions);
+// };
+
+// const advancedLogic = {
+//   whenAndOr:'',
+//   showAdvanced:'',
+//   whenAdvanced:'',
+//   operatorAdvanced:'',
+//   eqAdvanced:''
+// };
 
 /* eslint-disable quotes, max-len */
 export default [
@@ -11,7 +55,6 @@ export default [
     templates: {
       header: '<div class="row"> \n  <div class="col-sm-6">\n    <strong>{{ value.length }} {{ ctx.t("Advanced Logic Configured") }}</strong>\n  </div>\n</div>',
       row: '<div class="row"> \n  <div class="col-sm-6">\n    <div>{{ row.name }} </div>\n  </div>\n  <div class="col-sm-2"> \n    <div class="btn-group pull-right"> \n      <button class="btn btn-default editRow">{{ ctx.t("Edit") }}</button> \n      <button class="btn btn-danger removeRow">{{ ctx.t("Delete") }}</button> \n    </div> \n  </div> \n</div>',
-      footer: '',
     },
     type: 'editgrid',
     addAnother: 'Add Logic',
@@ -53,6 +96,10 @@ export default [
                       label: 'Simple',
                     },
                     {
+                      value: 'advanced',
+                      label: 'Advanced',
+                    },
+                    {
                       value: 'javascript',
                       label: 'Javascript',
                     },
@@ -69,6 +116,33 @@ export default [
                 dataSrc: 'values',
                 template: '<span>{{ item.label }}</span>',
                 type: 'select',
+              },
+              {
+                type: 'select',
+                input: true,
+                label: 'When',
+                key: 'whenAndOr',
+                tooltip: 'Selecting this add logical AND or logical OR to previously selected condition',
+                dataSrc: 'values',
+                customConditional({ row }) {
+                  return row.type === 'advanced';
+                },
+                data: {
+                  values: [
+                    { label: 'When all conditions are met(AND)', value: '&&' },
+                    { label: 'When any conditions are met(OR)', value: '||' }
+                  ]
+                }
+              },
+              {
+                input: true,
+                key: 'showAdvanced',
+                label: 'Show',
+                type: 'hidden',
+                tableView: false,
+                calculateValue() {
+                  return true;
+                },
               },
               {
                 weight: 10,
@@ -113,6 +187,88 @@ export default [
                   },
                 ],
               },
+                  {
+                    weight: 20,
+                    input: true,
+                    label: 'Conditions',
+                    key: 'advanced',
+                    tableView: false,
+                    templates: {
+                      header: '<div class="row"> \n  <div class="col-sm-6"><strong>{{ value.length }} {{ ctx.t("conditions") }}</strong></div>\n</div>',
+                      row: '<div class="row"> \n  <div class="col-sm-6">\n    <div>{{ row.name }} </div>\n  </div>\n  <div class="col-sm-2"> \n    <div class="btn-group pull-right"> \n      <button class="btn btn-default editRow">{{ ctx.t("Edit") }}</button> \n      <button class="btn btn-danger removeRow">{{ ctx.t("Delete") }}</button> \n    </div> \n  </div> \n</div>',
+                      footer: '',
+                    },
+                    type: 'editgrid',
+                    addAnother: 'Add condition',
+                    saveRow: 'Save condition',
+                    customConditional({ row }) {
+                      return row.type === 'advanced' && row.whenAndOr;
+                    },
+                    components: [
+                      {
+                        weight: 0,
+                        title: 'Condition',
+                        input: false,
+                        key: 'conditionPanel',
+                        type: 'panel',
+                        components: [
+                          {
+                            type: 'textfield',
+                            input: true,
+                            label: 'Name',
+                            key: 'name',
+                            tableView: false,
+                          },
+                          {
+                            type: 'select',
+                            input: true,
+                            label: 'Form component',
+                            key: 'whenAdvanced',
+                            dataSrc: 'custom',
+                            valueProperty: 'value',
+                            tableView: false,
+                            data: {
+                              custom(context) {
+                                return getContextComponents(context);
+                              },
+                            },
+                            onChange: function(value) {
+                              if (value?.instance?.selectItems) {
+                                const selectedItemDataType = value?.instance?.selectItems.find(item => item.value === value?.row?.whenAdvanced).dataType;
+                                setComparisonConditionsOnComponentSelection(selectedItemDataType);
+                              }
+                            }
+                          },
+                          {
+                            weight: 0,
+                            input: true,
+                            label: 'Condition',
+                            key: 'operatorAdvanced',
+                            tableView: false,
+                            valueProperty: 'value',
+                            data: {
+                              custom() {
+                                return getConditionalComparisonOptions();
+                              }
+                            },
+                            dataSrc: 'custom',
+                            template: '<span>{{ item.label }}</span>',
+                            type: 'select',
+                          },
+                          {
+                            type: 'textfield',
+                            input: true,
+                            label: 'Value',
+                            key: 'eqAdvanced',
+                            tableView: false,
+                            customConditional({ row }) {
+                              return row.operatorAdvanced !== 'isEmpty' || row.operatorAdvanced !== 'isNotEmpty';
+                            },
+                          },
+                        ],
+                      },
+                    ],
+                  },
               {
                 weight: 10,
                 type: 'textarea',
