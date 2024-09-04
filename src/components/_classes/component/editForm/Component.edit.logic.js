@@ -1,50 +1,6 @@
 import EditFormUtils from './utils';
 import { getContextComponents, getConditionalComparisonOptions, setComparisonConditionsOnComponentSelection } from '../../../../utils/utils';
 
-// var conditionalComparisonOptions = [];
-// const conditionalsDefault = [
-//   { 'value': 'isEqual', 'label': 'is Equal To' },
-//   { 'value': 'isNotEqual', 'label': 'is Not Equal To' },
-//   { 'value': 'isEmpty', 'label': 'is Empty' },
-//   { 'value': 'isNotEmpty', 'label': 'is Not Empty' }
-// ];
-
-// const conditionalsForText = [
-//   { 'value': 'includes', 'label': 'includes' },
-//   { 'value': 'notIncludes', 'label': 'not Includes' },
-//   { 'value': 'endsWith', 'label': 'ends With' }
-// ];
-
-// const conditionalsForNumber = [
-//   { 'value': 'lessThan', 'label': 'Less Than' },
-//   { 'value': 'greaterThan', 'label': 'Greater Than' },
-//   { 'value': 'lessThanOrEqual', 'label': 'Less Than Or Equal To' },
-//   { 'value': 'greaterThanOrEqual', 'label': 'Greater Than Or Equal To' }
-// ];
-
-// const changeConditionsOnData = (componentValue) => {
-//   switch (componentValue) {
-//     case 'textfield':
-//       conditionalComparisonOptions = [...conditionalsDefault, ...conditionalsForText];
-//       break;
-//     case 'number':
-//       conditionalComparisonOptions = [...conditionalsDefault, ...conditionalsForNumber];
-//       break;
-//     default:
-//       conditionalComparisonOptions = [...conditionalsDefault];
-//       break;
-//   }
-//   console.log('conditionalComparisonOptions', conditionalComparisonOptions);
-// };
-
-// const advancedLogic = {
-//   whenAndOr:'',
-//   showAdvanced:'',
-//   whenAdvanced:'',
-//   operatorAdvanced:'',
-//   eqAdvanced:''
-// };
-
 /* eslint-disable quotes, max-len */
 export default [
   {
