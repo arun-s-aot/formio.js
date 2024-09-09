@@ -197,15 +197,6 @@ export default [
                             validate: {
                               required: true,
                             },
-                            // onChange: function(value) {
-                            //   console.log(value);
-                            //   if (value?.instance?.selectItems) {
-                            //     const selectedItemDataType = value?.instance?.selectItems?.find(item => item.value === value?.row?.whenAdvanced).dataType;
-                            //     if (selectedItemDataType) {
-                            //       setComparisonConditionsOnComponentSelection(selectedItemDataType);
-                            //     }
-                            //   }
-                            // }
                           },
                           {
                             weight: 0,
@@ -214,17 +205,17 @@ export default [
                             key: 'operatorAdvanced',
                             tableView: false,
                             valueProperty: 'value',
-                            lazyLoad: true,
+                            // lazyLoad: true,
                             validate: {
                               required: true,
                             },
                             data: {
                               custom( value ) {
-                                console.log('value-=',value);
+                                // console.log('value-=',value);
                                 if (value?.instance?.options?.editForm?.components) {
-                                  console.log('value 0 -',value);
+                                  // console.log('value 0 -',value);
                                    const selectedItemDataType = value?.instance.options.editForm.components?.find(item => item.key === value?.row?.whenAdvanced)?.type;
-                                   console.log('selectedItemDataType 1-=',selectedItemDataType);
+                                   // console.log('selectedItemDataType 1-=',selectedItemDataType);
                                    if (selectedItemDataType) {
                                    return getConditionalComparisonOptions(selectedItemDataType);
                                    }
@@ -248,8 +239,53 @@ export default [
                             validate: {
                               required: true,
                             },
-                            customConditional({ row }) {
-                              return row.whenAdvanced !== '' && row.operatorAdvanced !== '' && row.operatorAdvanced !== 'isEmpty' && row.operatorAdvanced !== 'isNotEmpty';
+                            customConditional(value) {
+                              let show = false;
+                              if (value?.instance?.options?.editForm?.components) {
+                                const selectedItemDataType = value.instance.options.editForm.components?.find(item => item.key === value?.row?.whenAdvanced)?.type;
+                                const row = value.row;
+                                if ((selectedItemDataType !== "selectboxes" && selectedItemDataType !== "radio" && selectedItemDataType !== "select") && row.whenAdvanced !== '' && row.operatorAdvanced !== '' && row.operatorAdvanced !== 'isEmpty' && row.operatorAdvanced !== 'isNotEmpty') {
+                                  show = true;
+                                }
+                              }
+                              return show;
+                            },
+                          },
+                          {
+                            type: 'select',
+                            input: true,
+                            label: 'Value',
+                            key: 'eqAdvancedFromDropdown',
+                            tableView: false,
+                            validate: {
+                              required: true,
+                            },
+                            valueProperty: 'value',
+                            data: {
+                              custom( value ) {
+                               // console.log('selectOptions value-=',value);
+                                if (value?.instance?.options?.editForm?.components) {
+                                   const selectOptionsData = value?.instance.options.editForm.components?.find(item => item.key === value?.row?.whenAdvanced);
+                                   const selectOptions = selectOptionsData?.values || selectOptionsData?.data?.values;
+                                 //  console.log('selectOptions 1-=',selectOptions);
+                                   if (selectOptions) {
+                                   return selectOptions;
+                                   }
+                                }
+                                return [];
+                              }
+                            },
+                            dataSrc: 'custom',
+                            customConditional(value) {
+                              let show = false;
+                              if (value?.instance?.options?.editForm?.components) {
+                                const selectedItemDataType = value?.instance.options.editForm.components?.find(item => item.key === value?.row?.whenAdvanced)?.type;
+                                const row = value.row;
+                                if ((selectedItemDataType === "selectboxes" || selectedItemDataType === "radio" || selectedItemDataType === "select") && row.whenAdvanced !== '' && row.operatorAdvanced !== '' && row.operatorAdvanced !== 'isEmpty' && row.operatorAdvanced !== 'isNotEmpty') {
+                                  show = true;
+                                }
+                              }
+                              return show;
                             },
                           },
                         ],
