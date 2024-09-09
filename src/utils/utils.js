@@ -46,9 +46,6 @@ jsonLogic.add_operation('relativeMaxDate', (relativeMaxDate) => {
 
 export { ConditionOperators, jsonLogic, moment };
 
-// To set the dropdown options for conditional comparison options depended on form component selection in Advanced Logic
-let conditionalComparisonOptions = [];
-
 function setPathToComponentAndPerentSchema(component) {
   component.path = getComponentPath(component);
   const dataParent = getDataParentComponent(component);
@@ -350,9 +347,11 @@ export function checkSimpleConditional(component, condition, row, data, instance
  */
 export function checkAdvancedConditional(trigger, advanced, row, data, form, variable, onError, instance) {
   let custom = '';
+  //console.log('trigger=',trigger,'advanced=' , advanced,'row-', row,'data-', data,'form-', form,'variable-', variable,'onError-', onError,'instance-', instance);
   advanced.forEach((condition) => {
-    custom = createScriptFromAdvancedConditions(condition.whenAdvanced, condition.operatorAdvanced, condition.eqAdvanced,trigger.whenAndOr,custom);
+    custom = createScriptFromAdvancedConditions(condition,trigger,row,form,custom);
   });
+  //console.log('advanced=',advanced,'custom-->',custom);
   if (typeof custom === 'string') {
     custom = `var ${variable} = true; ${custom}; return ${variable};`;
   }
@@ -375,104 +374,113 @@ export function checkAdvancedConditional(trigger, advanced, row, data, form, var
  * @param existingCustomConditional
  * @returns {string}
  */
-function createScriptFromAdvancedConditions(component, operator, value,whenAndOr,existingCustomConditional) {
-  let condition = '';
+function createScriptFromAdvancedConditions(condition,trigger,row,form,existingCustomConditional) {
+  const { whenAdvanced = '', operatorAdvanced = '', eqAdvanced = '', eqAdvancedFromDropdown = '' } = condition;
+  const { whenAndOr } = trigger;
+  let advancedCondition = '';
   let fullCondition = existingCustomConditional ? existingCustomConditional : '';
-  switch (operator) {
+  const isSelectBox = (row[whenAdvanced] && typeof (row[whenAdvanced]) === 'object') ? true : false;
+  const dataType = form?.components?.find(comp=> comp.key === whenAdvanced)?.type;
+  const isDropdownSelection = dataType && (dataType === 'select' || dataType === 'selectboxes' || dataType === 'radio');
+  switch (operatorAdvanced) {
     case 'isEqual':
-      condition = `(data.${component} && data.${component} == '${value}')`;
+      advancedCondition = isSelectBox
+        ? `(data['${whenAdvanced}'] && data['${whenAdvanced}']['${eqAdvancedFromDropdown}'] === true)`
+        : `(data['${whenAdvanced}'] && data['${whenAdvanced}'] == (${isDropdownSelection} ? '${eqAdvancedFromDropdown}' : '${eqAdvanced}'))`;
       break;
     case 'isNotEqual':
-      condition = `(data.${component} && data.${component} != '${value}')`;
+      // advancedCondition = `(data.${whenAdvanced} && data.${whenAdvanced} != '${eqAdvanced}')`;
+      advancedCondition = isSelectBox
+        ?`(data['${whenAdvanced}'] && data['${whenAdvanced}']['${eqAdvancedFromDropdown}'] === false)`
+        : `(data['${whenAdvanced}'] && data['${whenAdvanced}'] !== (${isDropdownSelection} ? '${eqAdvancedFromDropdown}' : '${eqAdvanced}'))`;
       break;
     case 'isEmpty':
-      condition = `!data.${component}`;
+      advancedCondition = isSelectBox
+        ?`data['${whenAdvanced}'] && Object.values(data.${whenAdvanced}).every(value => value === false)`
+        : `!data.${whenAdvanced}`;
+     // advancedCondition = `!data.${whenAdvanced}`;
       break;
     case 'isNotEmpty':
-      condition = `!!data.${component}`;
+      advancedCondition = isSelectBox
+        ?`data['${whenAdvanced}'] && Object.values(data.${whenAdvanced}).some(value => value === true)`
+        : `!!data.${whenAdvanced}`;
+      // advancedCondition = `!!data.${whenAdvanced}`;
       break;
     case 'includes':
-      condition = `(data.${component} && data.${component}.includes('${value}'))`;
+      advancedCondition = `(data.${whenAdvanced} && data.${whenAdvanced}.includes('${eqAdvanced}'))`;
       break;
     case 'notIncludes':
-      condition = `(data.${component} && !data.${component}.includes('${value}'))`;
+      advancedCondition = `(data.${whenAdvanced} && !data.${whenAdvanced}.includes('${eqAdvanced}'))`;
       break;
     case 'endsWith':
-      condition = `(data.${component} && data.${component}.endsWith('${value}'))`;
+      advancedCondition = `(data.${whenAdvanced} && data.${whenAdvanced}.endsWith('${eqAdvanced}'))`;
       break;
     case 'lessThan':
-      condition = `(data.${component} && data.${component} < '${value}')`;
+      advancedCondition = `(data.${whenAdvanced} && data.${whenAdvanced} < '${eqAdvanced}')`;
       break;
     case 'greaterThan':
-      condition = `(data.${component} && data.${component} > '${value}')`;
+      advancedCondition = `(data.${whenAdvanced} && data.${whenAdvanced} > '${eqAdvanced}')`;
       break;
     case 'lessThanOrEqual':
-      condition = `(data.${component} && data.${component} <= '${value}')`;
+      advancedCondition = `(data.${whenAdvanced} && data.${whenAdvanced} <= '${eqAdvanced}')`;
       break;
     case 'greaterThanOrEqual':
-      condition = `(data.${component} && data.${component} >= '${value}')`;
+      advancedCondition = `(data.${whenAdvanced} && data.${whenAdvanced} >= '${eqAdvanced}')`;
       break;
     default:
       break;
   }
     if (existingCustomConditional) {
-        if (!existingCustomConditional.includes(condition)) {
+        if (!existingCustomConditional.includes(advancedCondition)) {
           if (existingCustomConditional.endsWith(';')) {
-            fullCondition = `${existingCustomConditional.slice(0, -1)} ${whenAndOr} ${condition}`;
+            fullCondition = `${existingCustomConditional.slice(0, -1)} ${whenAndOr} ${advancedCondition}`;
           }
           else {
-            fullCondition = `${existingCustomConditional} ${whenAndOr} ${condition}`;
+            fullCondition = `${existingCustomConditional} ${whenAndOr} ${advancedCondition}`;
           }
         }
     }
     else {
-          fullCondition = `result = ${condition}`;
+          fullCondition = `result = ${advancedCondition}`;
     }
     return fullCondition;
 }
 
 /**
- * Function to update the conditionalComparisonOptions based on component data type
+ * Function to get the conditionalComparisonOptions based on component data type
  *
  * @param componentDataType
  */
-export const setComparisonConditionsOnComponentSelection = (componentDataType) => {
+export const getConditionalComparisonOptions = (componentDataType) => {
   const conditionalsDefault = [
-    { 'value': 'isEqual', 'label': 'is Equal To' },
-    { 'value': 'isNotEqual', 'label': 'is Not Equal To' },
-    { 'value': 'isEmpty', 'label': 'is Empty' },
-    { 'value': 'isNotEmpty', 'label': 'is Not Empty' }
+    { value: 'isEqual', label: 'is Equal To' },
+    { value: 'isNotEqual', label: 'is Not Equal To' },
+    { value: 'isEmpty', label: 'is Empty' },
+    { value: 'isNotEmpty', label: 'is Not Empty' }
   ];
 
   const conditionalsForText = [
-    { 'value': 'includes', 'label': 'includes' },
-    { 'value': 'notIncludes', 'label': 'not Includes' },
-    { 'value': 'endsWith', 'label': 'ends With' }
+    { value: 'includes', label: 'includes' },
+    { value: 'notIncludes', label: 'not Includes' },
+    { value: 'endsWith', label: 'ends With' }
   ];
 
   const conditionalsForNumber = [
-    { 'value': 'lessThan', 'label': 'Less Than' },
-    { 'value': 'greaterThan', 'label': 'Greater Than' },
-    { 'value': 'lessThanOrEqual', 'label': 'Less Than Or Equal To' },
-    { 'value': 'greaterThanOrEqual', 'label': 'Greater Than Or Equal To' }
+    { value: 'lessThan', label: 'Less Than' },
+    { value: 'greaterThan', label: 'Greater Than' },
+    { value: 'lessThanOrEqual', label: 'Less Than Or Equal To' },
+    { value: 'greaterThanOrEqual', label: 'Greater Than Or Equal To' }
   ];
 
-  switch (componentDataType) {
-    case 'textfield':
-      conditionalComparisonOptions = [...conditionalsDefault, ...conditionalsForText];
-      break;
-    case 'number':
-      conditionalComparisonOptions = [...conditionalsDefault, ...conditionalsForNumber];
-      break;
-    default:
-      conditionalComparisonOptions = [...conditionalsDefault];
-      break;
+  if (componentDataType === 'number') {
+    return [...conditionalsDefault, ...conditionalsForNumber];
   }
-};
-
-// Getter method to filter comparison options depended on seleted component data type
-export const getConditionalComparisonOptions = () => {
-  return conditionalComparisonOptions;
+  else if (componentDataType === 'checkbox' || componentDataType === 'selectboxes' || componentDataType === 'radio') {
+    return [...conditionalsDefault];
+  }
+   else {
+    return [...conditionalsDefault, ...conditionalsForText];
+  }
 };
 
 export function getComponentActualValue(compPath, data, row) {
