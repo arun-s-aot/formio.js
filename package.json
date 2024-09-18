@@ -1,6 +1,6 @@
 {
-  "name": "@arun-s-aot/formiojs",
-  "version": "1.1.0",
+  "name": "@aot-technologies/formiojs",
+  "version": "1.0.0",
   "description": "Formsflow Customized JavaScript powered Forms with JSON Form Builder",
   "main": "index.js",
   "types": "index.d.ts",
@@ -41,22 +41,22 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/formio/formio.js.git"
+    "url": "git+https://github.com/arun-s-aot/formio.js.git"
   },
   "contributors": [
     {
       "name": "Form.io Open Source Community",
-      "url": "https://github.com/formio/formio.js/graphs/contributors"
+      "url": "https://github.com/arun-s-aot/formio.js/graphs/contributors"
     }
   ],
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/formio/formio.js/issues"
+    "url": "https://github.com/arun-s-aot/formio.js/issues"
   },
   "browser": {
     "vm": false
   },
-  "homepage": "https://github.com/formio/formio.js#readme",
+  "homepage": "https://github.com/arun-s-aot/formio.js#readme",
   "dependencies": {
     "@formio/bootstrap3": "2.12.4-rc.1",
     "@formio/choices.js": "10.2.1",

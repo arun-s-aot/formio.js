@@ -351,7 +351,7 @@ export function checkAdvancedConditional(trigger, advanced, row, data, form, var
   advanced.forEach((condition) => {
     custom = createScriptFromAdvancedConditions(condition,trigger,row,form,custom);
   });
-  //console.log('advanced=',advanced,'custom-->',custom);
+  // console.log('advanced=',advanced,'custom-->',custom);
   if (typeof custom === 'string') {
     custom = `var ${variable} = true; ${custom}; return ${variable};`;
   }
