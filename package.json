@@ -1,6 +1,6 @@
 {
   "name": "@aot-technologies/formiojs",
-  "version": "1.0.0",
+  "version": "1.0.0-test2",
   "description": "Formsflow Customized JavaScript powered Forms with JSON Form Builder",
   "main": "index.js",
   "types": "index.d.ts",
