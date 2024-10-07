@@ -684,7 +684,9 @@ class Formio {
   userPermissions(user, form, submission) {
     return NativePromise.all([
       (form !== undefined) ? NativePromise.resolve(form) : this.loadForm(),
-      (user !== undefined) ? NativePromise.resolve(user) : this.currentUser(),
+      // for FWF-3672 to fix unwanted /current api call
+      NativePromise.resolve(user),
+      // (user !== undefined) ? NativePromise.resolve(user) : this.currentUser(),
       (submission !== undefined || !this.submissionId) ? NativePromise.resolve(submission) : this.loadSubmission(),
       this.accessInfo()
     ]).then((results) => {
@@ -1131,9 +1133,11 @@ class Formio {
       }
     }
     // Return or updates the current user
-    return this.currentUserResolved
-      ? Formio.currentUser(opts.formio, opts)
-      : NativePromise.resolve(null);
+    return NativePromise.resolve(null);
+    // for FWF-3672 to fix unwanted /current api call
+    // return this.currentUserResolved
+    //   ? Formio.currentUser(opts.formio, opts)
+    //   : NativePromise.resolve(null);
   }
 
   static getToken(options) {
@@ -1474,13 +1478,17 @@ class Formio {
       authClient.tokenManager.get('accessToken')
         .then(accessToken => {
           if (accessToken) {
-            resolve(Formio.oAuthCurrentUser(options.formio, accessToken.accessToken));
+            // for FWF-3672 to fix unwanted /current api call
+            // resolve(Formio.oAuthCurrentUser(options.formio, accessToken.accessToken));
+            resolve(true);
           }
           else if (location.hash) {
             authClient.token.parseFromUrl()
               .then(token => {
                 authClient.tokenManager.add('accessToken', token);
-                resolve(Formio.oAuthCurrentUser(options.formio, token.accessToken));
+                // for FWF-3672 to fix unwanted /current api call
+                // resolve(Formio.oAuthCurrentUser(options.formio, token.accessToken));
+                resolve(true);
               })
               .catch(err => {
                 console.warn(err);
