@@ -10,6 +10,7 @@ import {
 } from '../utils/utils';
 import moment from 'moment';
 import NativePromise from 'native-promise-only';
+import Inputmask from 'inputmask';
 import fetchPonyfill from 'fetch-ponyfill';
 const { fetch, Headers, Request } = fetchPonyfill({
   Promise: NativePromise
@@ -695,6 +696,10 @@ class ValidationChecker {
             inputMask = setting;
           }
 
+          if (value && inputMask && typeof value === 'string' && component.type === 'textfield' ) {
+            return Inputmask.isValid(value, inputMask);
+          }
+
           inputMask = inputMask ? getInputMask(inputMask) : null;
 
           if (value && inputMask && !component.skipMaskValidation) {
@@ -941,7 +946,7 @@ class ValidationChecker {
 
   validate(component, validatorName, value, data, index, row, async, conditionallyVisible, validationObj) {
     // Skip validation for conditionally hidden components
-    if (!conditionallyVisible) {
+    if (!conditionallyVisible && !_.get(component.component, 'validateWhenHidden', false)) {
       return false;
     }
 

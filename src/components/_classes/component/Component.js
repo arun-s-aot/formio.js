@@ -217,7 +217,12 @@ export default class Component extends Element {
     return {
       operators: ['isEqual', 'isNotEqual', 'isEmpty', 'isNotEmpty'],
       valueComponent() {
-        return { type: 'textfield' };
+        return {
+          type: 'textfield',
+          widget: {
+            type: 'input'
+          }
+        };
       }
     };
   }
@@ -2124,6 +2129,10 @@ export default class Component extends Element {
       this.setElementInvalid(this.performInputMapping(element), false);
     });
     this.setInputWidgetErrorClasses(elements, hasErrors);
+    // do not set error classes for hidden components
+    if (!this.visible) {
+      return;
+    }
 
     if (hasErrors) {
       // Add error classes
@@ -2535,11 +2544,13 @@ export default class Component extends Element {
 
     const checkMask = (value) => {
       if (typeof value === 'string') {
-        const placeholderChar = this.placeholderChar;
+        if (this.component.type !== 'textfield') {
+          const placeholderChar = this.placeholderChar;
 
-        value = conformToMask(value, this.defaultMask, { placeholderChar }).conformedValue;
-        if (!FormioUtils.matchInputMask(value, this.defaultMask)) {
-          value = '';
+          value = conformToMask(value, this.defaultMask, { placeholderChar }).conformedValue;
+          if (!FormioUtils.matchInputMask(value, this.defaultMask)) {
+            value = '';
+          }
         }
       }
       else {
@@ -2649,11 +2660,11 @@ export default class Component extends Element {
     const input = this.performInputMapping(this.refs.input[index]);
     const valueMaskInput = this.refs.valueMaskInput;
 
-    if (valueMaskInput?.mask) {
+    if (valueMaskInput?.mask && valueMaskInput.mask.textMaskInputElement) {
       valueMaskInput.mask.textMaskInputElement.update(value);
     }
 
-    if (input.mask) {
+    if (input.mask && input.mask.textMaskInputElement) {
       input.mask.textMaskInputElement.update(value);
     }
     else if (input.widget && input.widget.setValue) {
@@ -3306,6 +3317,7 @@ export default class Component extends Element {
   }
 
   shouldSkipValidation(data, dirty, row) {
+    const { validateWhenHidden = false } = this.component || {};
     const rules = [
       // Force valid if component is read-only
       () => this.options.readOnly,
@@ -3314,9 +3326,9 @@ export default class Component extends Element {
       // Check to see if we are editing and if so, check component persistence.
       () => this.isValueHidden(),
       // Force valid if component is hidden.
-      () => !this.visible,
+      () => !this.visible && !validateWhenHidden,
       // Force valid if component is conditionally hidden.
-      () => !this.checkCondition(row, data)
+      () => !this.checkCondition(row, data) && !validateWhenHidden
     ];
 
     return rules.some(pred => pred());

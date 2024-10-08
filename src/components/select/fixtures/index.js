@@ -20,5 +20,3 @@ export comp19 from './comp19';
 export comp20 from './comp20';
 export comp21 from './comp21';
 export comp22 from './comp22';
-export comp23 from './comp23';
-export comp24 from './comp24';

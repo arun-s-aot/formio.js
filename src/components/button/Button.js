@@ -298,7 +298,7 @@ export default class ButtonComponent extends Field {
   }
 
   onClick(event) {
-    this.triggerReCaptcha();
+    this.triggerCaptcha();
     // Don't click if disabled or in builder mode.
     if (this.disabled || this.options.attachMode === 'builder') {
       return;
@@ -402,10 +402,17 @@ export default class ButtonComponent extends Field {
     let params = {
       response_type: 'code',
       client_id: settings.clientId,
-      redirect_uri: settings.redirectURI || window.location.origin || `${window.location.protocol}//${window.location.host}`,
-      state: settings.state,
+      redirect_uri: (settings.redirectURI && this.interpolate(settings.redirectURI)) || window.location.origin || `${window.location.protocol}//${window.location.host}`,
       scope: settings.scope
     };
+    if (settings.state) {
+      params.state = settings.state;
+    }
+    else if (settings.code_challenge) {
+      params.code_challenge = settings.code_challenge;
+      params.code_challenge_method = 'S256';
+    }
+
     /*eslint-enable camelcase */
 
     // Needs for the correct redirection URI for the OpenID
@@ -498,23 +505,23 @@ export default class ButtonComponent extends Field {
     }
   }
 
-  triggerReCaptcha() {
+  triggerCaptcha() {
     if (!this.root) {
       return;
     }
 
-    let recaptchaComponent;
+    let captchaComponent;
 
     this.root.everyComponent((component)=> {
-      if ( component.component.type === 'recaptcha' &&
+      if (/^(re)?captcha$/.test(component.component.type) &&
         component.component.eventType === 'buttonClick' &&
         component.component.buttonKey === this.component.key) {
-          recaptchaComponent = component;
+          captchaComponent = component;
         }
     });
 
-    if (recaptchaComponent) {
-      recaptchaComponent.verify(`${this.component.key}Click`);
+    if (captchaComponent) {
+      captchaComponent.verify(`${this.component.key}Click`);
     }
   }
 }

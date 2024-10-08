@@ -13,7 +13,6 @@ import {
   currentTimezone,
   unescapeHTML,
   getStringFromComponentPath,
-  searchComponents,
   convertStringToHTMLElement,
   getArrayFromComponentPath
 } from './utils/utils';
@@ -41,7 +40,7 @@ function getOptions(options) {
     alwaysDirty: false,
     saveDraftThrottle: 5000,
     display: 'form',
-    cdnUrl: Formio.cdn ? Formio.cdn.baseUrl : 'https://cdn.form.io'
+    cdnUrl: Formio.cdn.baseUrl
   });
   if (!options.events) {
     options.events = new EventEmitter();
@@ -688,7 +687,18 @@ export default class Webform extends NestedDataComponent {
       return NativePromise.resolve();
     }
 
-    this.setFormOptions(form);
+    // Allow the form to provide component overrides.
+    if (form && form.settings && form.settings.components) {
+      this.options.components = form.settings.components;
+    }
+
+    if (form && form.properties) {
+      this.options.properties = form.properties;
+    }
+    // Use the sanitize config from the form settings or the global sanitize config if it is not provided in the options
+    if (!this.options.sanitizeConfig && !this.builderMode) {
+      this.options.sanitizeConfig = _.get(form, 'settings.sanitizeConfig') || _.get(form, 'globalSettings.sanitizeConfig');
+    }
 
     if ('schema' in form && compareVersions(form.schema, '1.x') > 0) {
       this.ready.then(() => {
@@ -724,7 +734,7 @@ export default class Webform extends NestedDataComponent {
     const rebuild = this.rebuild() || NativePromise.resolve();
     return rebuild.then(() => {
       this.emit('formLoad', form);
-      this.triggerRecaptcha();
+      this.triggerCaptcha();
       // Make sure to trigger onChange after a render event occurs to speed up form rendering.
       setTimeout(() => {
         this.onChange(flags);
@@ -735,22 +745,6 @@ export default class Webform extends NestedDataComponent {
     });
   }
 
-   /**
-   * Sets options from the JSON schema .
-   *
-   * @param {Object} form - The JSON schema of the form.
-   * @returns {void}
-   */
-  setFormOptions(form) {
-       // Allow the form to provide component overrides.
-      if (form && form.settings && form.settings.components) {
-        this.options.components = form.settings.components;
-      }
-
-      if (form && form.properties) {
-        this.options.properties = form.properties;
-      }
-  }
   /**
    * Gets the form object.
    *
@@ -803,18 +797,6 @@ export default class Webform extends NestedDataComponent {
     this.setSubmission(submission);
   }
 
-    /**
-   * @param submission
-   * @param flags
-   * @return {void}
-   */
-  onSetSubmission(submission, flags = {}) {
-    this.submissionSet = true;
-    this.triggerChange(flags);
-    this.emit('beforeSetSubmission', submission);
-    this.setValue(submission, flags);
-  }
-
   /**
    * Sets a submission and returns the promise when it is ready.
    * @param submission
@@ -834,7 +816,10 @@ export default class Webform extends NestedDataComponent {
             ...resolveFlags
           };
         }
-        this.onSetSubmission(submission, flags);
+        this.submissionSet = true;
+        this.triggerChange(flags);
+        this.emit('beforeSetSubmission', submission);
+        this.setValue(submission, flags);
         return this.submissionReadyResolve(submission);
       },
       (err) => this.submissionReadyReject(err)
@@ -898,8 +883,7 @@ export default class Webform extends NestedDataComponent {
     formio.loadSubmissions({
       params: {
         state: 'draft',
-        owner: userId,
-        sort: '-created'
+        owner: userId
       }
     }).then(submissions => {
       if (submissions.length > 0 && !this.options.skipDraftRestore) {
@@ -942,9 +926,7 @@ export default class Webform extends NestedDataComponent {
       submission = { data: {} };
     }
     // Metadata needs to be available before setValue
-    this._submission.metadata = submission.metadata
-      ? _.cloneDeep(submission.metadata)
-      : {};
+    this._submission.metadata = submission.metadata || {};
     this.editing = !!submission._id;
 
     // Set the timezone in the options if available.
@@ -1237,7 +1219,6 @@ export default class Webform extends NestedDataComponent {
     }
 
     errors = errors.concat(this.customErrors);
-    errors = errors.concat(this.serverErrors || []);
 
     if (!errors.length) {
       this.setAlert(false);
@@ -1380,7 +1361,7 @@ export default class Webform extends NestedDataComponent {
 
     this.submitting = false;
     this.setPristine(false);
-    this.emit('submitError', error);
+    this.emit('submitError', error || this.errors);
 
     // Allow for silent cancellations (no error message, no submit button error state)
     if (error && error.silent) {
@@ -1388,13 +1369,8 @@ export default class Webform extends NestedDataComponent {
       return false;
     }
 
-    let errors;
-    if (this.submitted) {
-      errors = this.showErrors();
-    }
-    else {
-      errors = this.showErrors(error, true);
-    }
+    const  errors = this.showErrors(error, true);
+
     if (this.root && this.root.alert) {
       this.scrollIntoView(this.root.alert);
     }
@@ -1415,12 +1391,7 @@ export default class Webform extends NestedDataComponent {
       this.customErrors = this.customErrors.filter(err => err.component && err.component !== changed.component.key);
     }
 
-    if (this.parent?.subForm === this) {
-      super.onChange({ ...flags, modified }, false);
-    }
-    else {
-      super.onChange(flags, true);
-    }
+    super.onChange(flags, true);
     const value = _.clone(this.submission);
     flags.changed = value.changed = changed;
     flags.changes = changes;
@@ -1432,7 +1403,9 @@ export default class Webform extends NestedDataComponent {
     value.isValid = this.checkData(value.data, flags);
     this.loading = false;
     if (this.submitted) {
-      this.showErrors();
+      // show server errors while they are not cleaned/fixed
+      const nonComponentServerErrors = _.filter(this.serverErrors || [], err => !err.component && !err.path);
+      this.showErrors(nonComponentServerErrors.length ? nonComponentServerErrors : null);
     }
 
     // See if we need to save the draft of the form.
@@ -1538,6 +1511,9 @@ export default class Webform extends NestedDataComponent {
         }
 
         this.everyComponent((comp) => {
+          if (submission._vnote && comp.type === 'form' && comp.component.reference) {
+            _.get(submission.data, comp.path, {})._vnote = submission._vnote;
+          }
           const { persistent } = comp.component;
           if (persistent === 'client-only') {
             _.unset(submission.data, comp.path);
@@ -1711,16 +1687,20 @@ export default class Webform extends NestedDataComponent {
     }
   }
 
-  triggerRecaptcha() {
+  triggerCaptcha() {
     if (!this || !this.components) {
       return;
     }
-    const recaptchaComponent = searchComponents(this.components, {
-      'component.type': 'recaptcha',
-      'component.eventType': 'formLoad'
+
+    const captchaComponent = [];
+    eachComponent(this.components, (component) => {
+      if (/^(re)?captcha$/.test(component.type) && component.component.eventType === 'formLoad') {
+        captchaComponent.push(component);
+      }
     });
-    if (recaptchaComponent.length > 0) {
-      recaptchaComponent[0].verify(`${this.form.name ? this.form.name : 'form'}Load`);
+
+    if (captchaComponent.length > 0) {
+      captchaComponent[0].verify(`${this.form.name ? this.form.name : 'form'}Load`);
     }
   }
 

@@ -77,6 +77,10 @@ import formWithCheckboxRadioType from '../test/forms/formWithCheckboxRadioType';
 import formWithFormController from '../test/forms/formWithFormController';
 import calculateValueOnServerForEditGrid from '../test/forms/calculateValueOnServerForEditGrid';
 import formsWithAllowOverride from '../test/forms/formsWithAllowOverrideComps';
+import formWithDeeplyNestedConditionalComps from '../test/forms/formWithDeeplyNestedConditionalComps';
+import formWithValidation from '../test/forms/formWithValidation';
+import formWithNotAllowedTags from '../test/forms/formWithNotAllowedTags';
+import formWithValidateWhenHidden from '../test/forms/formWithValidateWhenHidden';
 
 global.requestAnimationFrame = (cb) => cb();
 global.cancelAnimationFrame = () => {};
@@ -88,6 +92,268 @@ if (_.has(Formio, 'Components.setComponents')) {
 /* eslint-disable max-statements */
 describe('Webform tests', function() {
   this.retries(3);
+
+  it('Should validate hidden and conditionally hidden components when validateWhenHidden is enabled for those components', done => {
+    const formElement = document.createElement('div');
+
+    Formio.createForm(formElement, formWithValidateWhenHidden)
+      .then(form => {
+        const errorClasses = ['has-error', 'has-message', form.options.componentErrorClass];
+        const number1 = form.getComponent('number1');
+        const number2 = form.getComponent('number2');
+        const number = form.getComponent('number');
+        const textField = form.getComponent('textField');
+        const textArea = form.getComponent('textArea');
+        const checkbox = form.getComponent('checkbox');
+
+        assert.equal(form.errors.length, 0);
+
+        number1.setValue(5);
+        number2.setValue(7);
+        setTimeout(()=> {
+          assert.equal(form.errors.length, 1);
+          assert.equal(!!number.error, true);
+
+          errorClasses.forEach(cl => assert.equal(number.element.classList.contains(cl), false, '(1) Should not set error classes for hidden components.'));
+          number2.setValue(3);
+
+          setTimeout(() => {
+            assert.equal(form.errors.length, 0);
+            assert.equal(!!number.error, false);
+            errorClasses.forEach(cl => assert.equal(number.element.classList.contains(cl), false, '(2) Should not set error classes for hidden components.'));
+
+            textField.setValue('test');
+            setTimeout(() => {
+              assert.equal(form.errors.length, 1);
+              assert.equal(!!textArea.error, true);
+              assert.equal(textArea.visible, true);
+
+              checkbox.setValue(true);
+              setTimeout(()=> {
+                assert.equal(textArea.visible, false);
+                assert.equal(form.errors.length, 1);
+                assert.equal(!!textArea.error, true);
+                errorClasses.forEach(cl => assert.equal(textArea.element.classList.contains(cl), false));
+
+                number2.setValue(9);
+                form.submit();
+                setTimeout(()=> {
+                  assert.equal(form.errors.length, 2);
+                  assert.equal(!!textArea.error, true);
+                  assert.equal(!!number.error, true);
+                  assert.equal(!!form.alert, true);
+                  assert.equal(form.refs.errorRef.length, 2);
+                  errorClasses.forEach(cl => assert.equal(number.element.classList.contains(cl), false));
+                  errorClasses.forEach(cl => assert.equal(textArea.element.classList.contains(cl), false));
+
+                  textField.setValue('test test test');
+                  number2.setValue(1);
+                  setTimeout(()=> {
+                    assert.equal(form.errors.length, 0);
+                    assert.equal(!!textArea.error, false);
+                    assert.equal(!!number.error, false);
+                    assert.equal(!!form.alert, false);
+
+                    done();
+                  }, 300);
+                }, 300);
+              }, 300);
+            }, 300);
+          }, 300);
+        }, 300);
+      })
+      .catch(done);
+  });
+
+  it('Should not validate hidden and conditionally hidden components when validateWhenHidden is not enabled for those components', done => {
+    const formElement = document.createElement('div');
+    const testForm = fastCloneDeep(formWithValidateWhenHidden);
+
+    _.each(testForm.components, comp => {
+      comp.validateWhenHidden = false;
+    });
+
+    Formio.createForm(formElement, testForm)
+      .then(form => {
+        const number1 = form.getComponent('number1');
+        const number2 = form.getComponent('number2');
+        const number = form.getComponent('number');
+        const textField = form.getComponent('textField');
+        const textArea = form.getComponent('textArea');
+        const checkbox = form.getComponent('checkbox');
+
+        assert.equal(form.errors.length, 0);
+
+        number1.setValue(5);
+        number2.setValue(7);
+        setTimeout(()=> {
+          assert.equal(form.errors.length, 0);
+          assert.equal(!!number.error, false);
+
+          textField.setValue('test');
+          setTimeout(() => {
+            assert.equal(form.errors.length, 1);
+            assert.equal(!!textArea.error, true);
+            assert.equal(textArea.visible, true);
+
+            checkbox.setValue(true);
+            setTimeout(()=> {
+              assert.equal(textArea.visible, false);
+              assert.equal(form.errors.length, 0);
+              assert.equal(!!textArea.error, false);
+              done();
+            }, 300);
+          }, 300);
+        }, 300);
+      })
+      .catch(done);
+  });
+
+  it('Should not lose values of conditionally visible components on setValue when server option is passed', function(done) {
+    const formElement = document.createElement('div');
+    Formio.createForm(formElement, formWithDeeplyNestedConditionalComps, { server: true }).then((form) => {
+      const submission = {
+        data: {
+          submit: false,
+          radio1: 'yes',
+          container: {
+            checkbox: true,
+            checkboxInPanelInHiddenContainer: true,
+            textField: 'test',
+            editGrid: [
+              {
+                number: 1,
+                textField: 'test2',
+              },
+              {
+                number: 2,
+              },
+            ],
+          },
+        },
+      };
+
+      form.setValue(fastCloneDeep(submission), { sanitize: true });
+      setTimeout(() => {
+        assert.deepEqual(form.data, submission.data);
+        assert.deepEqual(form.getValue(), submission);
+        done();
+      }, 500);
+    }).catch((err) => done(err));
+  });
+
+  it('Should not lose values of conditionally visible components on setValue when server option is not passed', function(done) {
+    const formElement = document.createElement('div');
+    Formio.createForm(formElement, formWithDeeplyNestedConditionalComps).then((form) => {
+      const submission = {
+        data: {
+          submit: false,
+          radio1: 'yes',
+          container: {
+            checkbox: true,
+            checkboxInPanelInHiddenContainer: true,
+            textField: 'test',
+            editGrid: [
+              {
+                number: 1,
+                textField: 'test2',
+              },
+              {
+                number: 2,
+              },
+            ],
+          },
+        },
+      };
+      form.setValue(fastCloneDeep(submission), { sanitize: true });
+
+      setTimeout(() => {
+        assert.deepEqual(form.data, submission.data);
+        assert.deepEqual(form.getValue(), submission);
+        done();
+      }, 500);
+    }).catch((err) => done(err));
+  });
+
+  it('Should fire error and submitError events with args on attempt to submit invalid form', function(done) {
+    const formElement = document.createElement('div');
+    const form = new Webform(formElement);
+
+    form.setForm(formWithValidation).then(() => {
+      let errorEvents = 0;
+      let submitErrorEvents = 0;
+      form.on('error', (arg) => {
+        assert.equal(!!arg, true, 'Error event should have argument');
+        errorEvents = errorEvents + 1;
+      });
+
+      form.on('submitError', (arg) => {
+        assert.equal(!!arg, true, 'submitError event should have argument');
+        submitErrorEvents = submitErrorEvents + 1;
+      });
+
+      const clickEvent = new Event('click');
+      const submitBtn = form.element.querySelector('[name="data[submit]"]');
+      submitBtn.dispatchEvent(clickEvent);
+
+      setTimeout(() => {
+        assert.equal(form.errors.length, 1);
+        assert.equal(errorEvents, 1);
+        assert.equal(submitErrorEvents, 1);
+        done();
+      }, 300);
+    }).catch((err) => done(err));
+  });
+
+  it('Should keep non-component server errors visible after changes in the form', (done) => {
+    const element = document.createElement('div');
+    const form = fastCloneDeep(formWithValidation);
+    form.components[0].validate = {};
+
+    const originalMakeRequest = Formio.makeRequest;
+    const errorText = 'Server error';
+    Formio.makeRequest = function() {
+      return new Promise((res, rej) => {
+        setTimeout(() => {
+          rej(errorText);
+        }, 50);
+      });
+    };
+
+    Formio.createForm(element, form)
+      .then(instance => {
+        instance.formio = new Formio('http://localhost:3000/test');
+        assert.equal(instance.errors.length, 0);
+        assert.equal(!!(instance.serverErrors && instance.serverErrors.length), false);
+        assert.equal(!!(instance.refs.errorRef && instance.refs.errorRef.length), false);
+
+        const clickEvent = new Event('click');
+        const submitBtn = instance.element.querySelector('[name="data[submit]"]');
+        submitBtn.dispatchEvent(clickEvent);
+
+        setTimeout(() => {
+          assert.equal(instance.errors.length, 0);
+          assert.equal(instance.serverErrors.length, 1);
+          assert.equal(instance.refs.errorRef.length, 1);
+          assert.equal(instance.refs.errorRef[0].textContent.trim(), errorText);
+
+          const inputEvent = new Event('input');
+          const textField = instance.element.querySelector('input[name="data[name]"]');
+          textField.value = 'test';
+          textField.dispatchEvent(inputEvent);
+
+          setTimeout(() => {
+            assert.equal(instance.errors.length, 0);
+            assert.equal(instance.serverErrors.length, 1);
+            assert.equal(instance.refs.errorRef.length, 1);
+            assert.equal(instance.refs.errorRef[0].textContent.trim(), errorText);
+            Formio.makeRequest = originalMakeRequest;
+            done();
+          }, 400);
+        }, 400);
+      })
+      .catch(done);
+  });
 
   it('Should execute form controller', function(done) {
     Formio.createForm(formWithFormController).then((form) => {
@@ -4350,6 +4616,178 @@ describe('Webform tests', function() {
     .catch((err) => done(err));
   });
 
+  describe('Test sanitizeConfig', () => {
+    it('Should sanitize components using default sanitizeConfig', function(done) {
+      const formElement = document.createElement('div');
+      const form = new Webform(formElement);
+      const testForm = fastCloneDeep(formWithNotAllowedTags);
+
+      form.setForm(testForm).then(() => {
+        const textFieldWithScript = form.getComponent('textFieldWithScript');
+        const textAreaWithIframe = form.getComponent('textAreaWithIframe');
+
+        assert.equal(textFieldWithScript.element?.getElementsByTagName('script').length, 0, 'Should not render srcipt tag');
+        assert.equal(textAreaWithIframe.element?.getElementsByTagName('iframe').length, 0, 'Should not render iframe tag');
+
+       done();
+      }).catch((err) => done(err));
+    });
+
+    it('Should sanitize components using sanitizeConfig from form settings', function(done) {
+      const formElement = document.createElement('div');
+      const form = new Webform(formElement);
+      const testForm = fastCloneDeep(formWithNotAllowedTags);
+      testForm.settings.sanitizeConfig = {
+        addTags: ['iframe', 'script'],
+      },
+
+      form.setForm(testForm).then(() => {
+        const textFieldWithScript = form.getComponent('textFieldWithScript');
+        const textAreaWithIframe = form.getComponent('textAreaWithIframe');
+
+        assert.equal(textFieldWithScript.element?.getElementsByTagName('script').length, 1, 'Should render srcipt tag');
+        assert.equal(textAreaWithIframe.element?.getElementsByTagName('iframe').length, 1, 'Should render iframe tag');
+
+       done();
+      }).catch((err) => done(err));
+    });
+
+    it('Should sanitize components using sanitizeConfig from global settings', function(done) {
+      const formElement = document.createElement('div');
+      const form = new Webform(formElement);
+      const testForm = fastCloneDeep(formWithNotAllowedTags);
+      testForm.globalSettings.sanitizeConfig = {
+        addTags: ['iframe', 'script'],
+      },
+
+      form.setForm(testForm).then(() => {
+        const textFieldWithScript = form.getComponent('textFieldWithScript');
+        const textAreaWithIframe = form.getComponent('textAreaWithIframe');
+
+        assert.equal(textFieldWithScript.element?.getElementsByTagName('script').length, 1, 'Should render srcipt tag');
+        assert.equal(textAreaWithIframe.element?.getElementsByTagName('iframe').length, 1, 'Should render iframe tag');
+
+       done();
+      }).catch((err) => done(err));
+    });
+
+    it('sanitizeConfig from form options must not be overriden by sanitizeConfig from global settings', function(done) {
+      const formElement = document.createElement('div');
+      const form = new Webform(formElement, {
+        sanitizeConfig: {
+          addTags: ['iframe'],
+        }
+      });
+      const testForm = fastCloneDeep(formWithNotAllowedTags);
+      testForm.globalSettings.sanitizeConfig = {
+        addTags: ['script'],
+      },
+
+      form.setForm(testForm).then(() => {
+        const textFieldWithScript = form.getComponent('textFieldWithScript');
+        const textAreaWithIframe = form.getComponent('textAreaWithIframe');
+
+        assert.equal(textFieldWithScript.element?.getElementsByTagName('script').length, 0, 'Should not render srcipt tag');
+        assert.equal(textAreaWithIframe.element?.getElementsByTagName('iframe').length, 1, 'Should render iframe tag');
+
+       done();
+      }).catch((err) => done(err));
+    });
+
+    it('sanitizeConfig from form options must not be overriden by sanitizeConfig from form settings', function(done) {
+      const formElement = document.createElement('div');
+      const form = new Webform(formElement, {
+        sanitizeConfig: {
+          addTags: ['iframe'],
+        }
+      });
+      const testForm = fastCloneDeep(formWithNotAllowedTags);
+      testForm.settings.sanitizeConfig = {
+        addTags: ['script'],
+      },
+
+      form.setForm(testForm).then(() => {
+        const textFieldWithScript = form.getComponent('textFieldWithScript');
+        const textAreaWithIframe = form.getComponent('textAreaWithIframe');
+
+        assert.equal(textFieldWithScript.element?.getElementsByTagName('script').length, 0, 'Should not render srcipt tag');
+        assert.equal(textAreaWithIframe.element?.getElementsByTagName('iframe').length, 1, 'Should render iframe tag');
+
+       done();
+      }).catch((err) => done(err));
+    });
+
+    it('sanitizeConfig from form settings must not be overriden by sanitizeConfig from global settings', function(done) {
+      const formElement = document.createElement('div');
+      const form = new Webform(formElement);
+      const testForm = fastCloneDeep(formWithNotAllowedTags);
+      testForm.settings.sanitizeConfig = {
+        addTags: ['iframe'],
+      },
+
+      testForm.globalSettings.sanitizeConfig = {
+        addTags: ['script'],
+      },
+
+      form.setForm(testForm).then(() => {
+        const textFieldWithScript = form.getComponent('textFieldWithScript');
+        const textAreaWithIframe = form.getComponent('textAreaWithIframe');
+
+        assert.equal(textFieldWithScript.element?.getElementsByTagName('script').length, 0, 'Should not render srcipt tag');
+        assert.equal(textAreaWithIframe.element?.getElementsByTagName('iframe').length, 1, 'Should render iframe tag');
+
+       done();
+      }).catch((err) => done(err));
+    });
+  });
+
+  for (const formTest of FormTests) {
+    const useDoneInsteadOfPromise = formTest.useDone;
+
+    if (useDoneInsteadOfPromise) {
+      describe(formTest.title || '', () => {
+        for (const title in formTest.tests) {
+          const formTestTest = formTest.tests[title];
+          it(title, function(done) {
+            const self = this;
+            const formElement = document.createElement('div');
+            let form = new Webform(formElement, _.cloneDeep(formTest.formOptions || {}));
+            form.setForm(formTest.form).then(function() {
+              formTestTest(form, function(error) {
+                form = null;
+                formElement.innerHTML = '';
+                if (error) {
+                  return done(error);
+                }
+                done();
+              }, self);
+            }).catch(done);
+          });
+        }
+      });
+    }
+    else {
+      describe(formTest.title || '', () => {
+        for (const title in formTest.tests) {
+          const formTestTest = formTest.tests[title];
+          it(title, function() {
+            const formElement = document.createElement('div');
+            const form = new Webform(formElement, { template: 'bootstrap3', language: 'en' });
+            return form.setForm(formTest.form).then(function() {
+              formTestTest(form, function(error) {
+                form.destroy();
+                if (error) {
+                  throw new Error(error);
+                }
+              });
+            });
+          });
+        }
+      });
+    }
+  }
+});
+
   it('Should show validation error when submitting number with just "-" sign and required validation', function(done) {
     const formJson =  {
       components: [
@@ -4645,53 +5083,6 @@ describe('Webform tests', function() {
       }).catch((err) => done(err));
     });
   });
-
-  for (const formTest of FormTests) {
-    const useDoneInsteadOfPromise = formTest.useDone;
-
-    if (useDoneInsteadOfPromise) {
-      describe(formTest.title || '', () => {
-        for (const title in formTest.tests) {
-          const formTestTest = formTest.tests[title];
-          it(title, function(done) {
-            const self = this;
-            const formElement = document.createElement('div');
-            let form = new Webform(formElement, _.cloneDeep(formTest.formOptions || {}));
-            form.setForm(formTest.form).then(function() {
-              formTestTest(form, function(error) {
-                form = null;
-                formElement.innerHTML = '';
-                if (error) {
-                  return done(error);
-                }
-                done();
-              }, self);
-            }).catch(done);
-          });
-        }
-      });
-    }
-    else {
-      describe(formTest.title || '', () => {
-        for (const title in formTest.tests) {
-          const formTestTest = formTest.tests[title];
-          it(title, function() {
-            const formElement = document.createElement('div');
-            const form = new Webform(formElement, { template: 'bootstrap3', language: 'en' });
-            return form.setForm(formTest.form).then(function() {
-              formTestTest(form, function(error) {
-                form.destroy();
-                if (error) {
-                  throw new Error(error);
-                }
-              });
-            });
-          });
-        }
-      });
-    }
-  }
-});
 
 // describe('Test the saveDraft and restoreDraft feature', () => {
 //   APIMock.submission('https://savedraft.form.io/myform', {

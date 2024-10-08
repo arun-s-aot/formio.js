@@ -1,7 +1,7 @@
 {
-  "coverage": "5.81%",
-  "expectCount": 1014,
-  "actualCount": 59,
+  "coverage": "6.32%",
+  "expectCount": 1043,
+  "actualCount": 66,
   "files": {
     "src/CDN.js": {
       "expectCount": 14,
@@ -39,6 +39,29 @@
         17,
         25,
         29
+      ]
+    },
+    "src/Form.js": {
+      "expectCount": 24,
+      "actualCount": 7,
+      "undocumentLines": [
+        8,
+        37,
+        38,
+        39,
+        42,
+        44,
+        45,
+        64,
+        97,
+        119,
+        143,
+        167,
+        200,
+        208,
+        244,
+        281,
+        292
       ]
     },
     "src/FormBuilder.js": {
@@ -431,14 +454,6 @@
         6
       ]
     },
-    "src/components/datagrid/fixtures/comp-with-reorder.js": {
-      "expectCount": 2,
-      "actualCount": 0,
-      "undocumentLines": [
-        1,
-        65
-      ]
-    },
     "src/components/datamap/DataMap.form.js": {
       "expectCount": 1,
       "actualCount": 0,
@@ -488,6 +503,18 @@
       "actualCount": 0,
       "undocumentLines": [
         7
+      ]
+    },
+    "src/components/editgrid/fixtures/formsWithEditGridAndConditions.js": {
+      "expectCount": 6,
+      "actualCount": 0,
+      "undocumentLines": [
+        1,
+        112,
+        234,
+        591,
+        640,
+        847
       ]
     },
     "src/components/email/Email.form.js": {
@@ -643,26 +670,28 @@
       ]
     },
     "src/components/recaptcha/ReCaptcha.js": {
-      "expectCount": 17,
+      "expectCount": 19,
       "actualCount": 0,
       "undocumentLines": [
         8,
         9,
         17,
-        28,
+        21,
+        25,
         32,
-        33,
-        42,
-        51,
-        59,
+        36,
+        37,
+        46,
+        55,
         63,
         67,
-        78,
+        71,
         82,
-        113,
-        121,
-        126,
-        155
+        86,
+        117,
+        125,
+        130,
+        159
       ]
     },
     "src/components/resource/Resource.form.js": {
@@ -840,34 +869,33 @@
       ]
     },
     "src/components/time/Time.js": {
-      "expectCount": 25,
+      "expectCount": 24,
       "actualCount": 0,
       "undocumentLines": [
         5,
         7,
         8,
         19,
-        31,
-        38,
-        41,
-        48,
-        59,
-        63,
-        67,
-        80,
-        87,
-        93,
-        97,
-        101,
-        106,
-        115,
-        124,
-        133,
-        149,
-        154,
-        158,
-        162,
-        173
+        26,
+        29,
+        36,
+        47,
+        51,
+        55,
+        68,
+        75,
+        81,
+        85,
+        89,
+        94,
+        103,
+        112,
+        121,
+        137,
+        142,
+        146,
+        153,
+        164
       ]
     },
     "src/components/tree/Node.js": {

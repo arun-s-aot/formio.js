@@ -1523,6 +1523,12 @@ export function sanitize(string, options) {
     ADD_ATTR: ['ref', 'target'],
     USE_PROFILES: { html: true }
   };
+  // Use profiles
+  if (options.sanitizeConfig && options.sanitizeConfig.useProfiles) {
+    Object.keys(options.sanitizeConfig.useProfiles).forEach(key => {
+      sanitizeOptions.USE_PROFILES[key] = options.sanitizeConfig.useProfiles[key];
+    });
+  }
   // Add attrs
   if (options.sanitizeConfig && Array.isArray(options.sanitizeConfig.addAttr) && options.sanitizeConfig.addAttr.length > 0) {
     options.sanitizeConfig.addAttr.forEach((attr) => {
@@ -1543,7 +1549,8 @@ export function sanitize(string, options) {
   }
   // Allowd URI Regex
   if (options.sanitizeConfig && options.sanitizeConfig.allowedUriRegex) {
-    sanitizeOptions.ALLOWED_URI_REGEXP = options.sanitizeConfig.allowedUriRegex;
+    const allowedUriRegex = options.sanitizeConfig.allowedUriRegex;
+    sanitizeOptions.ALLOWED_URI_REGEXP = _.isString(allowedUriRegex) ? new RegExp(allowedUriRegex) : allowedUriRegex;
   }
   // Allow to extend the existing array of elements that are safe for URI-like values
   if (options.sanitizeConfig && Array.isArray(options.sanitizeConfig.addUriSafeAttr) && options.sanitizeConfig.addUriSafeAttr.length > 0) {
