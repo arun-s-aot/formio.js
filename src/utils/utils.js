@@ -1381,12 +1381,12 @@ export function observeOverload(callback, options = {}) {
   };
 }
 
-export function getContextComponents(context, excludeNested, excludedTypes = []) {
+export function getContextComponents(context, excludeNested, excludedTypes = [],includedTypes = []) {
   const values = [];
 
   context.utils.eachComponent(context.instance.options.editForm.components, (component, path) => {
     const addToContextComponents = excludeNested ? !component.tree : true;
-    if (component.key !== context.data.key && addToContextComponents && !_.includes(excludedTypes, component.type)) {
+    if (component.key !== context.data.key && addToContextComponents && !_.includes(excludedTypes, component.type) && _.includes(includedTypes, component.type)) {
       values.push({
         label: `${component.label || component.key} (${path})`,
         value: path,
