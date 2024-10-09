@@ -298,10 +298,13 @@ export default class NestedComponent extends Field {
       while (thisPath && !thisPath.allowData && thisPath.parent) {
         thisPath = thisPath.parent;
       }
-
-      const rowIndex = component.row && this.isRowsDataComponent ? `[${Number.parseInt(component.row)}]` : '';
+      // any component that is nested in e.g. a Data Grid or an Edit Grid is going to receive a row prop; the problem
+      // is that options.row is passed to each further nested component, which results in erroneous paths like
+      // `editGrid[0].container[0].textField` rather than `editGrid[0].container.textField`. This should be adapted for other
+      // components with a tree-like data model
+      const rowIndex = component.row && !['container'].includes(thisPath.component.type) ? `[${Number.parseInt(component.row)}]` : '';
       path = thisPath.path ? `${thisPath.path}${rowIndex}.` : '';
-      path += component._parentPath && thisPath.type === 'form' ? component._parentPath : '';
+      path += component._parentPath && component.component.shouldIncludeSubFormPath ? component._parentPath : '';
       path += component.component.key;
       return path;
     }
@@ -326,6 +329,9 @@ export default class NestedComponent extends Field {
     options.skipInit = true;
     if (!(options.display === 'pdf' && this.builderMode)) {
       component.id = getRandomComponentId();
+    }
+    if (!this.isInputComponent && this.component.shouldIncludeSubFormPath) {
+      component.shouldIncludeSubFormPath = true;
     }
     const comp = Components.create(component, options, data, true);
 
@@ -411,6 +417,9 @@ export default class NestedComponent extends Field {
    */
   addComponent(component, data, before, noAdd) {
     data = data || this.data;
+    if (this.options.parentPath) {
+      component.shouldIncludeSubFormPath = true;
+    }
     component = this.hook('addComponent', component, data, before, noAdd);
     const comp = this.createComponent(component, this.options, data, before ? before : null);
     if (noAdd) {

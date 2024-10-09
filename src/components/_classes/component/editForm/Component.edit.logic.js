@@ -133,7 +133,7 @@ export default [
                     tableView: false,
                     data: {
                       custom(context) {
-                        return getContextComponents(context);
+                        return getContextComponents(context),null,null,['textfield', 'textarea', 'number', 'password', 'checkbox', 'selectboxes', 'select', 'currency', 'radio', 'email', 'url', 'phoneNumber', 'address', 'datetime', 'time', 'day'];
                       },
                     },
                   },
@@ -191,7 +191,7 @@ export default [
                             tableView: false,
                             data: {
                               custom(context) {
-                                return getContextComponents(context);
+                                return getContextComponents(context,null,null,['textfield', 'textarea', 'number', 'password', 'checkbox', 'selectboxes', 'select', 'currency', 'radio', 'email', 'url', 'phoneNumber', 'address', 'datetime', 'time', 'day']);
                               },
                             },
                             validate: {

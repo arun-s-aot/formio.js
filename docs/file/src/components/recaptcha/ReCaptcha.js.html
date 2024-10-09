@@ -203,18 +203,22 @@ export default class ReCaptchaComponent extends Component {
   }
 
   static get builderInfo() {
-    return {
-      title: &apos;reCAPTCHA&apos;,
-      group: &apos;premium&apos;,
-      icon: &apos;refresh&apos;,
-      documentation: &apos;/userguide/form-building/premium-components#recaptcha&apos;,
-      weight: 40,
-      schema: ReCaptchaComponent.schema()
-    };
+    return {};
   }
 
   static savedValueTypes() {
     return [];
+  }
+
+  static get conditionOperatorsSettings() {
+    return {
+      ...super.conditionOperatorsSettings,
+      operators: [&apos;isEmpty&apos;, &apos;isNotEmpty&apos;],
+    };
+  }
+
+  static get serverConditionSettings() {
+    return ReCaptchaComponent.conditionOperatorsSettings;
   }
 
   render() {
@@ -323,19 +327,19 @@ export default class ReCaptchaComponent extends Component {
 
     const componentData = row[this.component.key];
     if (!componentData || !componentData.token) {
-      this.setCustomValidity(&apos;ReCAPTCHA: Token is not specified in submission&apos;);
+      this.setCustomValidity(this.t(&apos;reCaptchaTokenNotSpecifiedError&apos;));
       return NativePromise.resolve(false);
     }
 
     if (!componentData.success) {
-      this.setCustomValidity(&apos;ReCAPTCHA: Token validation error&apos;);
+      this.setCustomValidity(this.t(&apos;reCaptchaTokenValidationError&apos;));
       return NativePromise.resolve(false);
     }
 
     return this.hook(&apos;validateReCaptcha&apos;, componentData.token, () =&gt; NativePromise.resolve(true))
       .then((success) =&gt; success)
       .catch((err) =&gt; {
-        this.setCustomValidity(err.message || err);
+        this.setCustomValidity(this.t(err.message || err));
         return false;
       });
   }

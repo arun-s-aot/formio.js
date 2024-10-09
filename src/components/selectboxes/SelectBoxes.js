@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import { componentValueTypes, getComponentSavedTypes } from '../../utils/utils';
+import { componentValueTypes, getComponentSavedTypes, boolValue } from '../../utils/utils';
 import RadioComponent from '../radio/Radio';
 
 export default class SelectBoxesComponent extends RadioComponent {
@@ -31,15 +31,22 @@ export default class SelectBoxesComponent extends RadioComponent {
     return {
       ...super.conditionOperatorsSettings,
       valueComponent(classComp) {
-        return {
-          type: 'select',
-          dataSrc: 'custom',
-          valueProperty: 'value',
-          valueType: 'string',
-          data: {
-            custom: `values = ${classComp && classComp.values ? JSON.stringify(classComp.values) : []}`
-          },
-        };
+        const isValuesSrc = !classComp.dataSrc || classComp.dataSrc === 'values';
+        return isValuesSrc
+        ? {
+            type: 'select',
+            dataSrc: 'custom',
+            valueProperty: 'value',
+            dataType: 'string',
+            data: {
+              custom: `values = ${classComp && classComp.values ? JSON.stringify(classComp.values) : []}`
+            },
+          }
+        : {
+            ...classComp,
+            dataType: 'string',
+            type: 'select',
+          };
       }
     };
   }
@@ -282,5 +289,17 @@ export default class SelectBoxesComponent extends RadioComponent {
     }
 
     return super.checkComponentValidity(data, dirty, rowData, options);
+  }
+
+  validateValueAvailability(setting, value) {
+    if (!boolValue(setting) || !value) {
+      return true;
+    }
+
+    const values = this.component.values;
+    const availableValueKeys = (values || []).map(({ value: optionValue }) => optionValue);
+    const valueKeys = Object.keys(value);
+
+    return valueKeys.every((key) => availableValueKeys.includes(key));
   }
 }

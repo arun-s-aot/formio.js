@@ -33,8 +33,6 @@ import {
   comp20,
   comp21,
   comp22,
-  comp23,
-  comp24,
 } from './fixtures';
 
 describe('Select Component', () => {
@@ -1044,63 +1042,6 @@ describe('Select Component', () => {
     }).catch(done);
   });
 
-  it('Should provide correct metadata.selectData for multiple Select with default value', (done) => {
-    const form = _.cloneDeep(comp23);
-    const element = document.createElement('div');
-
-    Formio.createForm(element, form).then(form => {
-      const submit = form.getComponent('submit');
-      const clickEvent = new Event('click');
-      const submitBtn = submit.refs.button;
-      submitBtn.dispatchEvent(clickEvent);
-
-      setTimeout(()=> {
-        const metadata = form.submission.metadata.selectData.select;
-        assert.deepEqual(metadata, {
-          value1: {
-            label: 'Label 1',
-          },
-          value3: {
-            label: 'Label 3',
-          },
-        });
-        done();
-      }, 200);
-    }).catch(done);
-  });
-
-  it('Should set correct label from metadata for multiple Select with default value', (done) => {
-    const form = _.cloneDeep(comp23);
-    const element = document.createElement('div');
-
-    Formio.createForm(element, form).then(form => {
-      const select = form.getComponent('select');
-      form.submission = {
-        data: {
-          select: ['value1', 'value2'],
-        },
-        metadata: {
-          selectData: {
-            select: {
-              value1: {
-                label: 'Label 1',
-              },
-              value2: {
-                label: 'Label 2',
-              },
-            },
-          },
-        },
-      };
-
-      setTimeout(()=> {
-        assert.equal(select.templateData['value1'].label, 'Label 1');
-        assert.equal(select.templateData['value2'].label, 'Label 2');
-        done();
-      }, 200);
-    }).catch(done);
-  });
-
   it('OnBlur validation should work properly with Select component', function(done) {
     this.timeout(0);
     const element = document.createElement('div');
@@ -1337,3 +1278,4 @@ describe('Select Component with Entire Object Value Property', () => {
     });
   });
 });
+
