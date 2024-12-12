@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 # Formsflow Changelog
 
+## 1.0.2
+### Changed
+ - Updated the formcomponent listing in logic and conditional listing to include hidden components also ( https://aottech.atlassian.net/browse/FWF-4097 )
+
 ## 1.0.1
 ### Changed
  - Upgraded from formiojs 4.19.x to 4.21.4
