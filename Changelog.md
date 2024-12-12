@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+# Formsflow Changelog
+
+## 1.0.1
+### Changed
+ - Upgraded from formiojs 4.19.x to 4.21.4
+ - Added fixes for conditional chains implementtion issues (https://aottech.atlassian.net/browse/FWF-3685)
+
+## 1.0.0-test2
+### Changed
+ - Commented 'current' API call to fix dependabot issues (https://aottech.atlassian.net/browse/FWF-3672)
+
+## 1.0.0
+### Changed
+ - Initial commit with addition of ADVANCED conditions in Logic area of components(https://aottech.atlassian.net/browse/FWF-3425). 
+ - Moving npm package from personal to organization npm (https://aottech.atlassian.net/browse/FWF-3658)
+
 ## 4.21.4
 ### Changed
  - Official Release
