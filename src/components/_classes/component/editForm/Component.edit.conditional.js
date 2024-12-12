@@ -1,5 +1,5 @@
 import EditFormUtils from './utils';
-import { getContextComponents } from '../../../../utils/utils';
+import { getContextComponents,listOfComponentsForConditionalChaining } from '../../../../utils/utils';
 /* eslint-disable quotes, max-len */
 export default [
   {
@@ -31,7 +31,7 @@ export default [
         valueProperty: 'value',
         data: {
           custom(context) {
-            return getContextComponents(context,null,null,['textfield', 'textarea', 'number', 'password', 'checkbox', 'selectboxes', 'select', 'currency', 'radio', 'email', 'url', 'phoneNumber', 'address', 'datetime', 'time', 'day']);
+            return getContextComponents(context,null,null,listOfComponentsForConditionalChaining);
           }
         }
       },

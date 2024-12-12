@@ -1,5 +1,5 @@
 import EditFormUtils from './utils';
-import { getContextComponents, getConditionalComparisonOptions } from '../../../../utils/utils';
+import { getContextComponents, getConditionalComparisonOptions, listOfComponentsForConditionalChaining } from '../../../../utils/utils';
 
 /* eslint-disable quotes, max-len */
 export default [
@@ -133,7 +133,7 @@ export default [
                     tableView: false,
                     data: {
                       custom(context) {
-                        return getContextComponents(context),null,null,['textfield', 'textarea', 'number', 'password', 'checkbox', 'selectboxes', 'select', 'currency', 'radio', 'email', 'url', 'phoneNumber', 'address', 'datetime', 'time', 'day'];
+                        return getContextComponents(context),null,null,listOfComponentsForConditionalChaining;
                       },
                     },
                   },
@@ -191,7 +191,7 @@ export default [
                             tableView: false,
                             data: {
                               custom(context) {
-                                return getContextComponents(context,null,null,['textfield', 'textarea', 'number', 'password', 'checkbox', 'selectboxes', 'select', 'currency', 'radio', 'email', 'url', 'phoneNumber', 'address', 'datetime', 'time', 'day']);
+                                return getContextComponents(context,null,null,listOfComponentsForConditionalChaining);
                               },
                             },
                             validate: {

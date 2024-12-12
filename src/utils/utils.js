@@ -1826,3 +1826,5 @@ export function isSelectResourceWithObjectValue(comp = {}) {
   return reference || (dataSrc === 'resource' && (!valueProperty || valueProperty === 'data'));
 }
 
+export const listOfComponentsForConditionalChaining = ['textfield', 'textarea', 'number', 'password', 'checkbox', 'selectboxes', 'select', 'currency', 'radio', 'email', 'url', 'phoneNumber', 'address', 'datetime', 'time', 'day','hidden'];
+
