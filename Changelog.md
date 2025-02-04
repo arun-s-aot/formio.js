@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 # Formsflow Changelog
 
+## 1.0.3
+### Changed
+ - Simple form condition in Logic is not showing component names properly fixed ( https://aottech.atlassian.net/browse/FWF-4326 )
+
 ## 1.0.2
 ### Changed
  - Updated the formcomponent listing in logic and conditional listing to include hidden components also ( https://aottech.atlassian.net/browse/FWF-4097 )
