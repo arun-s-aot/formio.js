@@ -133,7 +133,7 @@ export default [
                     tableView: false,
                     data: {
                       custom(context) {
-                        return getContextComponents(context),null,null,listOfComponentsForConditionalChaining;
+                        return getContextComponents(context,null,null,listOfComponentsForConditionalChaining);
                       },
                     },
                   },
