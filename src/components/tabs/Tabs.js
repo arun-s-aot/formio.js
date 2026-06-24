@@ -3,22 +3,25 @@ import NestedComponent from '../_classes/nested/NestedComponent';
 
 export default class TabsComponent extends NestedComponent {
   static schema(...extend) {
-    return NestedComponent.schema({
-      label: 'Tabs',
-      type: 'tabs',
-      input: false,
-      key: 'tabs',
-      persistent: false,
-      tableView: false,
-      components: [
-        {
-          label: 'Tab 1',
-          key: 'tab1',
-          components: [],
-        },
-      ],
-      verticalLayout: false,
-    }, ...extend);
+    return NestedComponent.schema(
+      {
+        label: 'Tabs',
+        type: 'tabs',
+        input: false,
+        key: 'tabs',
+        persistent: false,
+        tableView: false,
+        components: [
+          {
+            label: 'Tab 1',
+            key: 'tab1',
+            components: [],
+          },
+        ],
+        verticalLayout: false,
+      },
+      ...extend,
+    );
   }
 
   static get builderInfo() {
@@ -87,31 +90,31 @@ export default class TabsComponent extends NestedComponent {
   }
 
   render() {
-    return super.render(this.renderTemplate(
-      'tab',
-      {
-        tabKey: this.tabKey,
-        tabLikey: this.tabLikey,
-        tabLinkKey: this.tabLinkKey,
-        currentTab: this.currentTab,
-        tabComponents: this.tabs.map(tab => this.renderComponents(tab)),
-      },
-      (
-        this.options.flatten || this.options.pdf ? 'flat' : null
+    return super.render(
+      this.renderTemplate(
+        'tab',
+        {
+          tabKey: this.tabKey,
+          tabLikey: this.tabLikey,
+          tabLinkKey: this.tabLinkKey,
+          currentTab: this.currentTab,
+          tabComponents: this.tabs.map((tab) => this.renderComponents(tab)),
+        },
+        this.options.flatten || this.options.pdf ? 'flat' : null,
       ),
-    ));
+    );
   }
 
   attach(element) {
-    this.loadRefs(
-      element,
-      {
-        [this.tabLinkKey]: 'multiple',
-        [this.tabKey]: 'multiple',
-        [this.tabLikey]: 'multiple',
-      },
-    );
-    ['change', 'error'].forEach(event => this.on(event, this.handleTabsValidation.bind(this)));
+    this.loadRefs(element, {
+      [this.tabLinkKey]: 'multiple',
+      [this.tabKey]: 'multiple',
+      [this.tabLikey]: 'multiple',
+    });
+    [
+      'change',
+      'error',
+    ].forEach((event) => this.on(event, this.handleTabsValidation.bind(this)));
     const superAttach = super.attach(element);
     this.refs[this.tabLinkKey].forEach((tabLink, index) => {
       this.addEventListener(tabLink, 'click', (event) => {
@@ -131,11 +134,15 @@ export default class TabsComponent extends NestedComponent {
 
   /**
    * Set the current tab.
-   *
-   * @param index
+   * @param {number} index - The index of the tab to set.
    */
   setTab(index) {
-    if (!this.tabs || !this.tabs[index] || !this.refs[this.tabKey] || !this.refs[this.tabKey][index]) {
+    if (
+      !this.tabs ||
+      !this.tabs[index] ||
+      !this.refs[this.tabKey] ||
+      !this.refs[this.tabKey][index]
+    ) {
       return;
     }
 
@@ -150,19 +157,24 @@ export default class TabsComponent extends NestedComponent {
 
     _.each(this.refs[this.tabLinkKey], (tabLink, tabIndex) => {
       if (this.refs[this.tabLinkKey][tabIndex]) {
+        this.removeClass(tabLink, 'active');
         this.removeClass(tabLink, 'formio-tab-link-active');
       }
       if (this.refs[this.tabLikey][tabIndex]) {
+        this.removeClass(this.refs[this.tabLikey][tabIndex], 'active');
         this.removeClass(this.refs[this.tabLikey][tabIndex], 'formio-tab-link-container-active');
       }
     });
     if (this.refs[this.tabLikey][index]) {
+      this.addClass(this.refs[this.tabLikey][index], 'active');
       this.addClass(this.refs[this.tabLikey][index], 'formio-tab-link-container-active');
     }
     if (this.refs[this.tabLinkKey][index]) {
+      this.addClass(this.refs[this.tabLinkKey][index], 'active');
       this.addClass(this.refs[this.tabLinkKey][index], 'formio-tab-link-active');
     }
-    this.triggerChange();
+    this.setValue(this.data);
+    this.triggerChange?.();
   }
 
   beforeFocus(component) {
@@ -188,8 +200,7 @@ export default class TabsComponent extends NestedComponent {
       if (element.getAttribute('ref') !== 'openModal') {
         if (this.options.highlightErrors) {
           this.addClass(element, 'tab-error');
-        }
-        else {
+        } else {
           this.addClass(element, 'has-error');
         }
       }
@@ -202,11 +213,17 @@ export default class TabsComponent extends NestedComponent {
     }
 
     if (this.component.modalEdit) {
-      const element = Array.isArray(elements) || elements instanceof NodeList ? this.element : elements;
+      const element =
+        Array.isArray(elements) || elements instanceof NodeList ? this.element : elements;
       super.clearErrorClasses(element);
     }
 
-    elements = Array.isArray(elements) || elements instanceof NodeList ? elements : [elements];
+    elements =
+      Array.isArray(elements) || elements instanceof NodeList
+        ? elements
+        : [
+            elements,
+          ];
 
     elements.forEach((element) => {
       this.removeClass(element, 'is-invalid');
@@ -223,15 +240,22 @@ export default class TabsComponent extends NestedComponent {
     this.clearErrorClasses(this.refs[this.tabLinkKey]);
 
     const invalidTabsIndexes = this.tabs.reduce((invalidTabs, tab, tabIndex) => {
-      const hasComponentWithError = tab.some(comp => !!comp.error);
-      return hasComponentWithError ? [...invalidTabs, tabIndex] : invalidTabs;
+      const hasComponentWithError = tab.some((comp) => !!comp.error);
+      return hasComponentWithError
+        ? [
+            ...invalidTabs,
+            tabIndex,
+          ]
+        : invalidTabs;
     }, []);
 
     if (!invalidTabsIndexes.length) {
       return;
     }
 
-    const invalidTabs = [...this.refs[this.tabLinkKey]].filter((_, tabIndex) => invalidTabsIndexes.includes(tabIndex));
+    const invalidTabs = [
+      ...this.refs[this.tabLinkKey],
+    ].filter((_, tabIndex) => invalidTabsIndexes.includes(tabIndex));
     this.setErrorClasses(invalidTabs);
   }
 }

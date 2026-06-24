@@ -1,9 +1,9 @@
-export formModalEdit from './formModalEdit';
-export comp1 from './comp1';
-export comp2 from './comp2';
-export comp3 from './comp3';
-export comp4 from './comp4';
-export comp5 from './comp5';
-export comp6 from './comp6';
-export comp7 from './comp7';
-export comp8 from './comp8';
+export { default as formModalEdit } from './formModalEdit';
+export { default as comp1 } from './comp1';
+export { default as comp2 } from './comp2';
+export { default as comp3 } from './comp3';
+export { default as comp4 } from './comp4';
+export { default as comp5 } from './comp5';
+export { default as comp6 } from './comp6';
+export { default as comp7 } from './comp7';
+export { default as comp8 } from './comp8';

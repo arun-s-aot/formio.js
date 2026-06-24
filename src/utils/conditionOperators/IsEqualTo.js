@@ -20,7 +20,7 @@ export default class IsEqualTo extends ConditionOperator {
             catch (e) {}
         }
 
-        if (instance && instance.root) {
+        if (instance?.root?.getComponent) {
             const conditionTriggerComponent = instance.root.getComponent(conditionComponentPath);
 
             if (
@@ -44,7 +44,7 @@ export default class IsEqualTo extends ConditionOperator {
         }
 
         //special check for select boxes
-        if (_.isObject(value) && comparedValue && _.isString(comparedValue)) {
+        if (_.isObject(value) && comparedValue && _.isBoolean(value[comparedValue])) {
             return value[comparedValue];
         }
 
