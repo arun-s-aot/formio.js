@@ -109,8 +109,12 @@ export default class HTMLComponent extends Component {
   attach(element) {
     this.loadRefs(element, { html: 'single' });
     this.dataReady.then(() => {
-      if (this.refs.html) {
-        this.setContent(this.refs.html, this.content);
+      // Use this.element + renderContent() instead of refs.html + this.content.
+      // Setting innerHTML on refs.html (e.g. a <p> tag) with content that also
+      // contains <p> tags causes browsers to break the invalid nesting into
+      // sibling elements, making the content appear twice (FIO-8423).
+      if (this.element) {
+        this.setContent(this.element, this.renderContent());
       }
     });
     return super.attach(element);
