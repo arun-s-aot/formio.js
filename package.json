@@ -1,6 +1,6 @@
 {
   "name": "@aot-technologies/formiojs",
-  "version": "2.0.0-dev.2",
+  "version": "2.0.0",
   "description": "JavaScript powered Forms with JSON Form Builder",
   "main": "lib/cjs/index.js",
   "types": "lib/cjs/index.d.ts",
