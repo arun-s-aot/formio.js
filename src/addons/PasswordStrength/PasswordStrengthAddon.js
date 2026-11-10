@@ -5,7 +5,9 @@ import PasswordStrengthEditForm from './PasswordStrengthAddon.form';
 export default class PasswordStrengthAddon extends FormioAddon {
   static get info() {
     return {
-      supportedComponents: ['password'],
+      supportedComponents: [
+        'password',
+      ],
       name: 'passwordStrength',
       components: PasswordStrengthEditForm,
       label: 'Password Strength',
@@ -15,7 +17,7 @@ export default class PasswordStrengthAddon extends FormioAddon {
           { name: 'upperCase', required: false, message: 'Value should have uppercase letters' },
           { name: 'numeric', required: false, message: 'Value should have numeric symbols' },
           { name: 'lowerCase', required: false, message: 'Value should be have lowercase letters' },
-          { name: 'symbols', required: false, message: 'Value should have symbols' }
+          { name: 'symbols', required: false, message: 'Value should have symbols' },
         ],
         updateOn: 'levelChange',
         required: true,
@@ -39,9 +41,9 @@ export default class PasswordStrengthAddon extends FormioAddon {
         `,
         location: {
           insert: 'after',
-          selector: '[ref="element"]'
-        }
-      }
+          selector: '[ref="element"]',
+        },
+      },
     };
   }
 
@@ -58,7 +60,7 @@ export default class PasswordStrengthAddon extends FormioAddon {
             return `Value must be longer than ${minLength} characters`;
           }
           return true;
-        }
+        },
       },
       upperCase: {
         check: (value) => {
@@ -67,7 +69,7 @@ export default class PasswordStrengthAddon extends FormioAddon {
           }
           return 'Value must contain uppercased alphabetical characters';
         },
-        increaseCharactersPoolSize: 26
+        increaseCharactersPoolSize: 26,
       },
       numeric: {
         check: (value) => {
@@ -125,10 +127,12 @@ export default class PasswordStrengthAddon extends FormioAddon {
 
   set entropy(value) {
     const oldLevel = this.getLevel();
-    const updateOnEntropyChange = this.settings.updateOn === 'entropyChange' && this._entropy !== value;
+    const updateOnEntropyChange =
+      this.settings.updateOn === 'entropyChange' && this._entropy !== value;
     this._entropy = value;
     this.level = this.getLevel();
-    const updateOnLevelChange = this.settings.updateOn === 'levelChange' && oldLevel.name !== this.level.name;
+    const updateOnLevelChange =
+      this.settings.updateOn === 'levelChange' && oldLevel.name !== this.level.name;
     if (updateOnLevelChange || updateOnEntropyChange) {
       this.updateView();
     }
@@ -158,7 +162,9 @@ export default class PasswordStrengthAddon extends FormioAddon {
   }
 
   calculatePasswordEntropy(passwordLength, charactersPoolSize) {
-    return !passwordLength || !charactersPoolSize ? 0 : this.log2(Math.pow(charactersPoolSize, passwordLength));
+    return !passwordLength || !charactersPoolSize
+      ? 0
+      : this.log2(Math.pow(charactersPoolSize, passwordLength));
   }
 
   calculatePasswordEntropyWords(wordsCount) {
@@ -182,11 +188,17 @@ export default class PasswordStrengthAddon extends FormioAddon {
   }
 
   checkBlackList(value) {
-    const blackList = [...this.settings.blackList];
+    const blackList = [
+      ...this.settings.blackList,
+    ];
     let customBlacklistedWords = this.settings.customBlacklistedWords;
 
     if (customBlacklistedWords && typeof customBlacklistedWords === 'string') {
-      customBlacklistedWords = this.evaluate(customBlacklistedWords, this.component.evalContext({ value }), 'values');
+      customBlacklistedWords = this.evaluate(
+        customBlacklistedWords,
+        this.component.evalContext({ value }),
+        'values',
+      );
       if (customBlacklistedWords && customBlacklistedWords.length) {
         blackList.push(...customBlacklistedWords);
       }
@@ -214,7 +226,10 @@ export default class PasswordStrengthAddon extends FormioAddon {
       // If there are some random characters except of blacklisted words in the password,
       // calculate the entropy for them
       const { charactersPoolSize } = restValue.length ? this.performChecks(restValue) : 0;
-      const entropyOfNonblacklistedValue = this.calculatePasswordEntropy(restValue.length, charactersPoolSize);
+      const entropyOfNonblacklistedValue = this.calculatePasswordEntropy(
+        restValue.length,
+        charactersPoolSize,
+      );
       // Calculate the entropy if the biggest part of the password could be picked up from dictionary words
       const dictionaryCheckEntropy = this.calculatePasswordEntropyWords(blacklistedWords.length);
       const entropy = dictionaryCheckEntropy + entropyOfNonblacklistedValue;
@@ -226,15 +241,19 @@ export default class PasswordStrengthAddon extends FormioAddon {
 
   /**
    * Determines is a password is secure enough to submit
-   * @return {boolean}
+   * @returns {boolean} - returns TRUE if password is valid, FALSE if it is not.
    */
   isValid() {
     const isValidCheck = this.settings.isValid;
     if (isValidCheck && typeof isValidCheck === 'string') {
-      const valid = this.evaluate(isValidCheck, this.component.evalContext({
-        entropy: this.entropy,
-        level: this.level
-      }), 'valid');
+      const valid = this.evaluate(
+        isValidCheck,
+        this.component.evalContext({
+          entropy: this.entropy,
+          level: this.level,
+        }),
+        'valid',
+      );
       return valid;
     }
 
@@ -245,18 +264,18 @@ export default class PasswordStrengthAddon extends FormioAddon {
    * Handles the result of check and constructs a new error object or returns an amount of points to add to the current entropy
    * @param {boolean|number} valid - Determines if the validation was failed or an amount of points if it was passed
    * @param {*} validation - Validation configuration
-   * @param {string} value - Value which was validated
    * @param {string} message - Message which should be shown if validation was not passed
+   * @param {any[]} errors - The errors array (will be mutated)
+   * @returns {number} - Returns an amount of points to add to the current entropy
    */
   handleRuleCheckResult(valid, validation, message, errors) {
     if (valid !== true) {
       errors.push({
         validation: validation.name,
         message,
-        level: validation.required ? 'error' : 'warning'
+        level: validation.required ? 'error' : 'warning',
       });
-    }
-    else if (validation.increaseCharactersPoolSize) {
+    } else if (validation.increaseCharactersPoolSize) {
       return validation.increaseCharactersPoolSize;
     }
 
@@ -279,54 +298,54 @@ export default class PasswordStrengthAddon extends FormioAddon {
     this.customRules.forEach((rule) => {
       if (rule.check && typeof rule.check === 'string') {
         const valid = this.evaluate(rule.check, this.component.evalContext({ value }), 'valid');
-        const message = typeof valid === 'string' ? valid : `Password does not meet ${rule.name} validation`;
+        const message =
+          typeof valid === 'string' ? valid : `Password does not meet ${rule.name} validation`;
         charactersPoolSize += this.handleRuleCheckResult(valid, rule, message, errors);
       }
     });
 
     return {
       charactersPoolSize,
-      errors
+      errors,
     };
   }
 
   /**
    * Performs checks to validate password security
-   * @param {string} value - Suggested password
+   * @param {string} value - The password value to be checked.
+   * @returns {boolean} - Returns TRUE if password is strong enough, FALSE if it is not.
    */
   checkValidity(value) {
     const passwordLength = value.length;
 
     const { charactersPoolSize, errors } = this.performChecks(value);
-    this.errors = errors;
-
     const entropy = this.calculatePasswordEntropy(passwordLength, charactersPoolSize);
-    const blackListCheck = this.settings.blackList?.length || this.settings.customBlacklistedWords ?
-      this.checkBlackList(value)
-      : null;
-
-    // If there were found some words from the black list
-    if (blackListCheck && blackListCheck !== true) {
-      this.handleBlackListCheckResult(blackListCheck);
-      // Select the mininal entropy based on the dictionary check or symbolic check
-      this.entropy = Math.min(entropy, blackListCheck.entropy);
-    }
-    else {
-      this.entropy = entropy;
-    }
+    const blackListCheck =
+      this.settings.blackList?.length || this.settings.customBlacklistedWords
+        ? this.checkBlackList(value)
+        : null;
 
     const isValid = this.isValid();
     if (!isValid) {
-      this.errors.push({
+      errors.push({
         message: 'Password is not strong enough',
-        level: this.settings.required ? 'error' : 'warning'
+        level: this.settings.required ? 'error' : 'warning',
       });
     }
 
-    return !this.errors.length;
+    // If there were found some words from the black list
+    if (blackListCheck && blackListCheck !== true) {
+      this.handleBlackListCheckResult(blackListCheck, errors);
+      // Select the mininal entropy based on the dictionary check or symbolic check
+      this.entropy = Math.min(entropy, blackListCheck.entropy);
+    } else {
+      this.entropy = entropy;
+    }
+
+    return !errors.length;
   }
 
-  handleBlackListCheckResult(result) {
+  handleBlackListCheckResult(result, errors) {
     const blacklistedWords = result.blacklistedWords;
     const isRequired = this.settings.disableBlacklistedWords;
     const message = `Password ${isRequired ? 'must' : 'should'} not include common words: ${blacklistedWords.join(', ')}`;
@@ -335,13 +354,15 @@ export default class PasswordStrengthAddon extends FormioAddon {
       required: isRequired,
     };
 
-    this.handleRuleCheckResult(false, validation, message, this.errors);
+    this.handleRuleCheckResult(false, validation, message, errors);
   }
 
   constructor(settings, componentInstance) {
     super(settings, componentInstance);
     this._entropy = 0; // Set initial value of entropy
-    this.levels = [...(this.settings.levels || this.defaultSettings.levels)];
+    this.levels = [
+      ...(this.settings.levels || this.defaultSettings.levels),
+    ];
     this.levels.sort((a, b) => a.maxEntropy - b.maxEntropy); // Sort levels from the lowest one to the highest
     this.level = this.levels[0]; // Set currnt level to the lowest one
     this.maxEntropy = this.levels[this.levels.length - 1].maxEntropy; // Set maximal amount of security points based on the highest level
@@ -396,8 +417,7 @@ export default class PasswordStrengthAddon extends FormioAddon {
           console.warn(`Unknown insert option: ${insert}`);
           return false;
       }
-    }
-    else {
+    } else {
       console.warn(`No elements found using selector: ${selector}`);
       return false;
     }
@@ -410,6 +430,7 @@ export default class PasswordStrengthAddon extends FormioAddon {
   /**
    * Finds the level which one the passed entropy suits
    * @param {number} entropy - Points of password's security
+   * @returns {object} - Returns the level object
    */
   getLevel(entropy = this.entropy) {
     const lowestLevel = this.levels[0];

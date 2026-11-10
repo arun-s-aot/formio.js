@@ -1,7 +1,12 @@
-import _isEqual from 'lodash/isEqual';
+import _isEqual from 'lodash/isEqualWith';
 import _omit from 'lodash/omit';
+import _omitBy from 'lodash/omitBy';
 import _difference from 'lodash/difference';
+import _isNumber from 'lodash/isNumber';
+import _isPlainObject from 'lodash/isPlainObject';
+import _each from 'lodash/each';
 import _keys from 'lodash/keys';
+
 export default [
   {
     key: 'labelPosition',
@@ -76,27 +81,14 @@ export default [
     input: false,
     components: [
       {
-        type: 'select',
-        input: true,
-        label: 'Breadcrumb Type',
-        key: 'breadcrumb',
-        dataSrc: 'values',
-        data: {
-          values: [
-            { label: 'Default', value: 'default' },
-            { label: 'Condensed', value: 'condensed' },
-            { label: 'Hidden', value: 'none' },
-          ]
-        }
-      },
-      {
         input: true,
         type: 'checkbox',
         label: 'Allow click on Breadcrumb',
         key: 'breadcrumbClickable',
         defaultValue: true,
-        conditional: {
-          json: { '!==': [{ var: 'data.breadcrumb' }, 'none'] }
+        customConditional({ data = {}, buildingForm = {} }) {
+          const formSettings = buildingForm.settings || {};
+          return ![data.breadcrumb, formSettings.wizardBreadcrumbsType].includes('none');
         }
       },
       {
@@ -174,12 +166,21 @@ export default [
       let isWizardPanel = false;
       if (context.instance.options.editForm.display === 'wizard') {
         const { components } = context.instance.options.editForm;
-        const component = context.instance.options.editComponent;
+        let component = context.instance.options.editComponent;
         if (components && component) {
+          const cleanComponent = (comp, diff) => {
+            const cleanComp = _omit(comp, diff);
+            _each(cleanComp, (propValue, prop) => {
+              if (_isPlainObject(propValue)) {
+                cleanComp[prop] = _omitBy(propValue, v => !v && !_isNumber(v) && v !== false);
+              }
+            });
+            return cleanComp;
+          }
           isWizardPanel = components.some((comp) => {
             const diff = _difference(_keys(comp), _keys(component)) || [];
             diff.push('components');
-            return _isEqual(_omit(comp, diff), _omit(component, diff));
+            return _isEqual(cleanComponent(comp, diff), cleanComponent(component, diff));
           });
         }
       }

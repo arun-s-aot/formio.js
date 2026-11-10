@@ -1,38 +1,36 @@
 import Webform from './Webform';
 import Component from './components/_classes/component/Component';
 import tippy from 'tippy.js';
-import NativePromise from 'native-promise-only';
 import Components from './components/Components';
-import { GlobalFormio as Formio } from './Formio';
-import { fastCloneDeep, bootstrapVersion, getArrayFromComponentPath, getStringFromComponentPath } from './utils/utils';
-import { eachComponent, getComponent } from './utils/formUtils';
+import { Formio } from './Formio';
+import {
+  fastCloneDeep,
+  bootstrapVersion,
+  getArrayFromComponentPath,
+  getStringFromComponentPath,
+  eachComponent,
+  getComponent,
+  componentInfo,
+} from './utils';
 import BuilderUtils from './utils/builder';
 import _ from 'lodash';
 import autoScroll from 'dom-autoscroller';
+import Templates from './templates/Templates';
+import './components/builder';
 
-require('./components/builder');
-
-let Templates = Formio.Templates;
-
-if (!Templates) {
-  Templates = require('./templates/Templates').default;
+// We need this here because dragula pulls in CustomEvent class that requires global to exist.
+if (typeof window !== 'undefined' && typeof window.global === 'undefined') {
+  window.global = window;
 }
-
-let dragula;
-if (typeof window !== 'undefined') {
-  // Import from "dist" because it would require and "global" would not be defined in Angular apps.
-  dragula = require('dragula/dist/dragula');
-}
+import dragula from 'dragula';
 
 export default class WebformBuilder extends Component {
-  // eslint-disable-next-line max-statements
   constructor() {
     let element, options;
     if (arguments[0] instanceof HTMLElement || arguments[1]) {
       element = arguments[0];
       options = arguments[1];
-    }
-    else {
+    } else {
       options = arguments[0];
     }
     // Reset skipInit in case PDFBuilder has set it.
@@ -41,7 +39,8 @@ export default class WebformBuilder extends Component {
 
     super(null, options);
 
-    this.element = element;
+    this.setElement(element);
+    this.dragulaLib = dragula;
 
     this.builderHeight = 0;
     this.schemas = {};
@@ -70,18 +69,31 @@ export default class WebformBuilder extends Component {
         this.groups[group] = this.builder[group];
         this.groups[group].components = this.groups[group].components || {};
         this.groups[group].componentOrder = this.groups[group].componentOrder || [];
-        this.groups[group].subgroups = Object.keys(this.groups[group].groups || {}).map((groupKey) => {
-          this.groups[group].groups[groupKey].componentOrder = Object.keys(this.groups[group].groups[groupKey].components).map((key) => key);
-          return this.groups[group].groups[groupKey];
-        });
+        this.groups[group].subgroups = Object.keys(this.groups[group].groups || {}).map(
+          (groupKey) => {
+            this.groups[group].groups[groupKey].componentOrder = Object.keys(
+              this.groups[group].groups[groupKey].components,
+            ).map((key) => key);
+            return this.groups[group].groups[groupKey];
+          },
+        );
         this.groupOrder.push(this.groups[group]);
       }
     }
 
     this.groupOrder = this.groupOrder
-      .filter(group => group && !group.ignore)
-      .sort((a, b) => a.weight - b.weight)
-      .map(group => group.key);
+      .filter((group) => group && !group.ignore)
+      .sort((a, b) => a.weight - b.weight);
+
+    const defaultOpenedGroup = this.groupOrder.find((x) => x.key !== 'basic' && x.default);
+    if (defaultOpenedGroup) {
+      this.groupOrder.forEach((x) => {
+        if ('default' in x && x.key !== defaultOpenedGroup.key) {
+          x.default = false;
+        }
+      });
+    }
+    this.groupOrder = this.groupOrder.map((group) => group.key);
 
     for (const type in Components.components) {
       const component = Components.components[type];
@@ -101,19 +113,14 @@ export default class WebformBuilder extends Component {
       for (const key in info.components) {
         const compKey = group === 'resource' ? `component-${key}` : key;
         let comp = info.components[compKey];
-        if (
-          comp === true &&
-          Components.components[key] &&
-          Components.components[key].builderInfo
-        ) {
+        if (comp === true && Components.components[key] && Components.components[key].builderInfo) {
           comp = Components.components[key].builderInfo;
         }
         if (comp && comp.schema) {
           this.schemas[key] = comp.schema;
           info.components[compKey] = comp;
           info.components[compKey].key = key;
-        }
-        else {
+        } else {
           // Do not include this component in the components array.
           delete info.components[compKey];
         }
@@ -127,12 +134,18 @@ export default class WebformBuilder extends Component {
 
     this.options.hooks.renderComponent = (html, { component, self }) => {
       if (self.type === 'form' && !self.key) {
-        const template = this.hook('renderComponentFormTemplate', html.replace('formio-component-form', ''));
+        const template = this.hook(
+          'renderComponentFormTemplate',
+          html.replace('formio-component-form', ''),
+        );
         // The main webform shouldn't have this class as it adds extra styles.
         return template;
       }
 
-      if (this.options.disabled && this.options.disabled.includes(self.key) || self.parent.noDragDrop) {
+      if (
+        (this.options.disabled && this.options.disabled.includes(self.key)) ||
+        self.parent.noDragDrop
+      ) {
         return html;
       }
 
@@ -140,23 +153,29 @@ export default class WebformBuilder extends Component {
         html,
         disableBuilderActions: self?.component?.disableBuilderActions,
         childComponent: component,
-        design: self?.options?.design
+        design: self?.options?.design,
+        editJson: self?.options?.editJson,
+        editComponent: this.hasEditTabs(component.type),
       });
     };
 
     this.options.hooks.renderComponents = (html, { components, self }) => {
       // if Datagrid and already has a component, don't make it droppable.
-      if (self.type === 'datagrid' && components.length > 0 || self.noDragDrop) {
+      if ((self.type === 'datagrid' && components.length > 0) || self.noDragDrop) {
         return html;
       }
 
-      if (!components ||
+      if (
+        !components ||
         (!components.length && !components.nodrop) ||
-        (self.type === 'form' && components.length <= 1 && (components.length === 0 || components[0].type === 'button'))
+        (self.type === 'form' &&
+          components.length <= 1 &&
+          (components.length === 0 || components[0].type === 'button'))
       ) {
-        html = this.renderTemplate('builderPlaceholder', {
-          position: 0
-        }) + html;
+        html =
+          this.renderTemplate('builderPlaceholder', {
+            position: 0,
+          }) + html;
       }
       return this.renderTemplate('builderComponents', {
         key: self.key,
@@ -188,7 +207,10 @@ export default class WebformBuilder extends Component {
         return element;
       }
       // Attach container and component to element for later reference.
-      const containerElement = element.querySelector(`[ref="${component.component.key}-container"]`) || element;
+      const containerElement =
+        element.querySelector(
+          `[${this._referenceAttributeName}="${component.component.key}-container"]`,
+        ) || element;
       containerElement.formioContainer = container;
       containerElement.formioComponent = component;
 
@@ -198,7 +220,10 @@ export default class WebformBuilder extends Component {
       }
 
       // If this is an existing datagrid element, don't make it draggable.
-      if ((component.type === 'datagrid' || component.type === 'datamap') && components.length > 0) {
+      if (
+        (component.type === 'datagrid' || component.type === 'datamap') &&
+        components.length > 0
+      ) {
         return element;
       }
 
@@ -214,7 +239,11 @@ export default class WebformBuilder extends Component {
       const dataGridContainer = component.refs[`${component.key}-container`];
 
       if (dataGridContainer) {
-        component.attachComponents(dataGridContainer.parentNode, [], component.component.components);
+        component.attachComponents(
+          dataGridContainer.parentNode,
+          [],
+          component.component.components,
+        );
       }
       // Need to set up horizontal rearrangement of fields.
     };
@@ -226,61 +255,72 @@ export default class WebformBuilder extends Component {
       params: {
         type: 'resource',
         limit: 1000000,
-        select: '_id,title,name,components'
+        select: '_id,title,name,components',
+
+        'tags__ne': 'noBuilderResource'
       }
     };
     if (this.options && this.options.resourceTag) {
-      query.params.tags = [this.options.resourceTag];
-    }
-    else if (!this.options || !this.options.hasOwnProperty('resourceTag')) {
-      query.params.tags = ['builder'];
+      query.params.tags = [
+        this.options.resourceTag,
+      ];
+    } else if (!this.options || !this.options.hasOwnProperty('resourceTag')) {
+      query.params.tags = [
+        'builder',
+      ];
     }
     const formio = new Formio(Formio.projectUrl);
     const isResourcesDisabled = this.options.builder && this.options.builder.resource === false;
 
-    formio.loadProject().then((project) => {
-      if (project && (_.get(project, 'settings.addConfigToForms', false) ||  _.get(project, 'addConfigToForms', false))) {
-        const config = project.config || {};
-        this.options.formConfig = config;
+    formio
+      .loadProject()
+      .then((project) => {
+        if (
+          project &&
+          (_.get(project, 'settings.addConfigToForms', false) ||
+            _.get(project, 'addConfigToForms', false))
+        ) {
+          const config = project.config || {};
+          this.options.formConfig = config;
 
-        const pathToFormConfig = 'webform._form.config';
-        const webformConfig = _.get(this, pathToFormConfig);
+          const pathToFormConfig = 'webform._form.config';
+          const webformConfig = _.get(this, pathToFormConfig);
 
-        if (this.webform  && !webformConfig) {
-          _.set(this, pathToFormConfig, config);
-        }
-      }
-    }).catch((err) => {
-      console.warn(`Could not load project settings: ${err.message || err}`);
-    });
-
-    if (!formio.noProject && !isResourcesDisabled) {
-      const resourceOptions = this.options.builder && this.options.builder.resource;
-      formio.loadForms(query)
-        .then((resources) => {
-          if (resources.length) {
-            this.builder.resource = {
-              title: resourceOptions ? resourceOptions.title : 'Existing Resource Fields',
-              key: 'resource',
-              weight: resourceOptions ? resourceOptions.weight : 50,
-              subgroups: [],
-              components: [],
-              componentOrder: []
-            };
-            this.groups.resource = {
-              title: resourceOptions ? resourceOptions.title : 'Existing Resource Fields',
-              key: 'resource',
-              weight: resourceOptions ? resourceOptions.weight : 50,
-              subgroups: [],
-              components: [],
-              componentOrder: []
-            };
-            if (!this.groupOrder.includes('resource')) {
-              this.groupOrder.push('resource');
-            }
-            this.addExistingResourceFields(resources);
+          if (this.webform && !webformConfig) {
+            _.set(this, pathToFormConfig, config);
           }
-        });
+        }
+      })
+      .catch((err) => {
+        console.warn(`Could not load project settings: ${err.message || err}`);
+      });
+
+    if (!formio.noProject && !isResourcesDisabled && formio.formsUrl) {
+      const resourceOptions = this.options.builder && this.options.builder.resource;
+      formio.loadForms(query).then((resources) => {
+        if (resources.length) {
+          this.builder.resource = {
+            title: resourceOptions ? resourceOptions.title : 'Existing Resource Fields',
+            key: 'resource',
+            weight: resourceOptions ? resourceOptions.weight : 50,
+            subgroups: [],
+            components: [],
+            componentOrder: [],
+          };
+          this.groups.resource = {
+            title: resourceOptions ? resourceOptions.title : 'Existing Resource Fields',
+            key: 'resource',
+            weight: resourceOptions ? resourceOptions.weight : 50,
+            subgroups: [],
+            components: [],
+            componentOrder: [],
+          };
+          if (!this.groupOrder.includes('resource')) {
+            this.groupOrder.push('resource');
+          }
+          this.addExistingResourceFields(resources);
+        }
+      });
     }
 
     // Notify components if they need to modify their render.
@@ -308,47 +348,54 @@ export default class WebformBuilder extends Component {
         default: index === 0,
       };
 
-      eachComponent(resource.components, (component) => {
-        if (component.type === 'button') return;
-        if (
-          this.options &&
-          this.options.resourceFilter &&
-          (!component.tags || component.tags.indexOf(this.options.resourceFilter) === -1)
-        ) return;
+      eachComponent(
+        resource.components,
+        (component) => {
+          if (component.type === 'button') return;
+          if (
+            this.options &&
+            this.options.resourceFilter &&
+            (!component.tags || component.tags.indexOf(this.options.resourceFilter) === -1)
+          )
+            return;
 
-        let componentName = component.label;
-        if (!componentName && component.key) {
-          componentName = _.upperFirst(component.key);
-        }
-
-        subgroup.componentOrder.push(`component-${component.key}`);
-        subgroup.components[`component-${component.key}`] = _.merge(
-          fastCloneDeep(Components.components[component.type]
-            ? Components.components[component.type].builderInfo
-            : Components.components['unknown'].builderInfo),
-          {
-            key: component.key,
-            title: componentName,
-            group: 'resource',
-            subgroup: resourceKey,
-          },
-          {
-            schema: {
-              ...component,
-              label: component.label,
-              key: component.key,
-              lockKey: true,
-              source: (!this.options.noSource ? resource._id : undefined),
-              isNew: true
-            }
+          let componentName = component.label;
+          if (!componentName && component.key) {
+            componentName = _.upperFirst(component.key);
           }
-        );
-      }, true);
+
+          subgroup.componentOrder.push(`component-${component.key}`);
+          subgroup.components[`component-${component.key}`] = _.merge(
+            fastCloneDeep(
+              Components.components[component.type]
+                ? Components.components[component.type].builderInfo
+                : Components.components['unknown'].builderInfo,
+            ),
+            {
+              key: component.key,
+              title: componentName,
+              group: 'resource',
+              subgroup: resourceKey,
+            },
+            {
+              schema: {
+                ...component,
+                label: component.label,
+                key: component.key,
+                lockKey: true,
+                source: !this.options.noSource ? resource._id : undefined,
+                isNew: true,
+              },
+            },
+          );
+        },
+        true,
+      );
 
       this.groups.resource.subgroups.push(subgroup);
     });
 
-    this.triggerRedraw();
+    this.triggerRedraw?.();
   }
 
   attachTooltip(component, title) {
@@ -356,9 +403,12 @@ export default class WebformBuilder extends Component {
       allowHTML: true,
       trigger: 'mouseenter focus',
       placement: 'top',
-      delay: [200, 0],
+      delay: [
+        200,
+        0,
+      ],
       zIndex: 10000,
-      content: title
+      content: title,
     });
   }
 
@@ -376,14 +426,15 @@ export default class WebformBuilder extends Component {
       moveComponent: 'single',
       copyComponent: 'single',
       pasteComponent: 'single',
-      editJson: 'single'
+      editJson: 'single',
     });
 
     if (component.refs.copyComponent) {
       this.attachTooltip(component.refs.copyComponent, this.t('Copy'));
 
       component.addEventListener(component.refs.copyComponent, 'click', () =>
-        this.copyComponent(component));
+        this.copyComponent(component),
+      );
     }
 
     if (component.refs.pasteComponent) {
@@ -410,21 +461,29 @@ export default class WebformBuilder extends Component {
       this.attachTooltip(component.refs.editComponent, this.t('Edit'));
 
       component.addEventListener(component.refs.editComponent, 'click', () =>
-        this.editComponent(component.schema, parent, false, false, component.component, { inDataGrid: component.isInDataGrid }));
+        this.editComponent(component.schema, parent, false, false, component.component, {
+          inDataGrid: component.isInDataGrid,
+          editComponentPath: component.path,
+        }),
+      );
     }
 
     if (component.refs.editJson) {
       this.attachTooltip(component.refs.editJson, this.t('Edit JSON'));
 
       component.addEventListener(component.refs.editJson, 'click', () =>
-        this.editComponent(component.schema, parent, false, true, component.component));
+        this.editComponent(component.schema, parent, false, true, component.component, {
+          editComponentPath: component.path,
+        }),
+      );
     }
 
     if (component.refs.removeComponent) {
       this.attachTooltip(component.refs.removeComponent, this.t('Remove'));
 
       component.addEventListener(component.refs.removeComponent, 'click', () =>
-        this.removeComponent(component.schema, parent, component.component, component));
+        this.removeComponent(component.schema, parent, component.component, component),
+      );
     }
 
     return element;
@@ -434,7 +493,7 @@ export default class WebformBuilder extends Component {
     this.webform = new Webform(this.element, options);
     if (this.element) {
       this.loadRefs(this.element, {
-        form: 'single'
+        form: 'single',
       });
       if (this.refs.form) {
         this.webform.element = this.refs.form;
@@ -445,7 +504,6 @@ export default class WebformBuilder extends Component {
 
   /**
    * Called when everything is ready.
-   *
    * @returns {Promise} - Wait for webform to be ready.
    */
   get ready() {
@@ -461,20 +519,20 @@ export default class WebformBuilder extends Component {
       },
       advanced: {
         title: 'Advanced',
-        weight: 10
+        weight: 10,
       },
       layout: {
         title: 'Layout',
-        weight: 20
+        weight: 20,
       },
       data: {
         title: 'Data',
-        weight: 30
+        weight: 30,
       },
       premium: {
         title: 'Premium',
-        weight: 40
-      }
+        weight: 40,
+      },
     };
   }
 
@@ -501,7 +559,8 @@ export default class WebformBuilder extends Component {
   /**
    * When a component sets its api key, we need to check if it is unique within its namespace. Find the namespace root
    * so we can calculate this correctly.
-   * @param component
+   * @param {import('@formio/core').Component} component - The component to find the namespace root for.
+   * @returns {import('@formio/core').Component[]} - The components root for this namespace.
    */
   findNamespaceRoot(component) {
     const path = getArrayFromComponentPath(component.path);
@@ -518,7 +577,10 @@ export default class WebformBuilder extends Component {
     const componentSchema = component.component;
     // If the current component is the namespace, we don't need to find it again.
     if (namespaceKey === component.key) {
-      return [...componentSchema.components, componentSchema];
+      return [
+        ...componentSchema.components,
+        componentSchema,
+      ];
     }
 
     // Get the namespace component so we have the original object.
@@ -533,7 +595,18 @@ export default class WebformBuilder extends Component {
     }
 
     // Some components are their own namespace.
-    if (['address', 'container', 'datagrid', 'editgrid', 'dynamicWizard', 'tree'].includes(component.type) || component.tree || component.arrayTree) {
+    if (
+      [
+        'address',
+        'container',
+        'datagrid',
+        'editgrid',
+        'dynamicWizard',
+        'tree',
+      ].includes(component.type) ||
+      component.tree ||
+      component.arrayTree
+    ) {
       return component.key;
     }
 
@@ -547,18 +620,22 @@ export default class WebformBuilder extends Component {
         scrollEnabled: this.sideBarScroll,
         groupOrder: this.groupOrder,
         groupId: `builder-sidebar-${this.id}`,
-        groups: this.groupOrder.map((groupKey) => this.renderTemplate('builderSidebarGroup', {
-          group: this.groups[groupKey],
-          groupKey,
-          groupId: `builder-sidebar-${this.id}`,
-          subgroups: this.groups[groupKey].subgroups.map((group) => this.renderTemplate('builderSidebarGroup', {
-            group,
-            groupKey: group.key,
-            groupId: `group-container-${groupKey}`,
-            subgroups: []
-          })),
-          keyboardActionsEnabled: this.keyboardActionsEnabled,
-        })),
+        groups: this.groupOrder.map((groupKey) =>
+          this.renderTemplate('builderSidebarGroup', {
+            group: this.groups[groupKey],
+            groupKey,
+            groupId: `builder-sidebar-${this.id}`,
+            subgroups: this.groups[groupKey].subgroups.map((group) =>
+              this.renderTemplate('builderSidebarGroup', {
+                group,
+                groupKey: group.key,
+                groupId: `group-container-${groupKey}`,
+                subgroups: [],
+              }),
+            ),
+            keyboardActionsEnabled: this.keyboardActionsEnabled,
+          }),
+        ),
       }),
       form: this.webform.render(),
     });
@@ -575,7 +652,7 @@ export default class WebformBuilder extends Component {
         sidebar: 'single',
         'sidebar-search': 'single',
         'sidebar-groups': 'single',
-        'container': 'multiple',
+        container: 'multiple',
         'sidebar-anchor': 'multiple',
         'sidebar-group': 'multiple',
         'sidebar-container': 'multiple',
@@ -595,31 +672,58 @@ export default class WebformBuilder extends Component {
       }
 
       if (!bootstrapVersion(this.options)) {
+        const getAttribute = (anchor, attribute) => {
+          let elem = anchor.getAttribute(`data-${attribute}`);
+          if (!elem) {
+            elem = anchor.getAttribute(`data-bs-${attribute}`);
+          }
+          return elem;
+        };
+
+        const hideShow = (group, forceShow, toggle = false) => {
+          if (forceShow || (toggle && !Array.from(group.classList).includes('show'))) {
+            group.classList.add([
+              'show',
+            ]);
+            group.style.display = 'inherit';
+          } else {
+            group.classList.remove([
+              'show',
+            ]);
+            group.style.display = 'none';
+          }
+        };
+
         // Initialize
         this.refs['sidebar-group'].forEach((group) => {
-          group.style.display = (group.getAttribute('data-default') === 'true') ? 'inherit' : 'none';
+          hideShow(group, getAttribute(group, 'default') === 'true');
         });
 
         // Click event
         this.refs['sidebar-anchor'].forEach((anchor, index) => {
-          this.addEventListener(anchor, 'click', () => {
-            const clickedParentId = anchor.getAttribute('data-parent').slice('#builder-sidebar-'.length);
-            const clickedId = anchor.getAttribute('data-target').slice('#group-'.length);
-
-            this.refs['sidebar-group'].forEach((group, groupIndex) => {
-              const openByDefault = group.getAttribute('data-default') === 'true';
-              const groupId = group.getAttribute('id').slice('group-'.length);
-              const groupParent = group.getAttribute('data-parent').slice('#builder-sidebar-'.length);
-
-              group.style.display =
-                (
+          this.addEventListener(
+            anchor,
+            'click',
+            () => {
+              const clickedParentId = getAttribute(anchor, 'parent').slice(
+                '#builder-sidebar-'.length,
+              );
+              const clickedId = getAttribute(anchor, 'target').slice('#group-'.length);
+              this.refs['sidebar-group'].forEach((group, groupIndex) => {
+                const openByDefault = getAttribute(group, 'default') === 'true';
+                const groupId = group.getAttribute('id').slice('group-'.length);
+                const groupParent = getAttribute(group, 'parent').slice('#builder-sidebar-'.length);
+                if (
                   (openByDefault && groupParent === clickedId) ||
                   groupId === clickedParentId ||
                   groupIndex === index
-                )
-                  ? 'inherit' : 'none';
-            });
-          }, true);
+                ) {
+                  hideShow(group, false, true);
+                }
+              });
+            },
+            true,
+          );
         });
       }
 
@@ -633,11 +737,13 @@ export default class WebformBuilder extends Component {
         });
       }
 
-      this.addEventListener(this.refs['sidebar-search'], 'input',
+      this.addEventListener(
+        this.refs['sidebar-search'],
+        'input',
         _.debounce((e) => {
           const searchString = e.target.value;
           this.searchFields(searchString);
-        }, 300)
+        }, 300),
       );
 
       if (this.dragDropEnabled) {
@@ -647,14 +753,31 @@ export default class WebformBuilder extends Component {
       const drake = this.dragula;
 
       if (this.refs.form) {
-        autoScroll([window], {
-          margin: 20,
-          maxSpeed: 6,
-          scrollWhenOutside: true,
-          autoScroll: function() {
-              return this.down && drake?.dragging;
+        // Find the nearest scrollable ancestor of the builder element.
+        // When embedded in a fixed-height panel (e.g. formsflow), the window
+        // does not scroll — dom-autoscroller must target the panel instead.
+        const scrollTargets = [];
+        let scrollEl = this.element ? this.element.parentElement : null;
+        while (scrollEl && scrollEl !== document.body) {
+          const oy = window.getComputedStyle(scrollEl).overflowY;
+          if (oy === 'auto' || oy === 'scroll') {
+            scrollTargets.push(scrollEl);
+            break;
           }
-        });
+          scrollEl = scrollEl.parentElement;
+        }
+        scrollTargets.push(window);
+        autoScroll(
+          scrollTargets,
+          {
+            margin: 20,
+            maxSpeed: 6,
+            scrollWhenOutside: true,
+            autoScroll: function () {
+              return this.down && drake?.dragging;
+            },
+          },
+        );
 
         return this.webform.attach(this.refs.form);
       }
@@ -676,7 +799,7 @@ export default class WebformBuilder extends Component {
       const filteredComponents = [];
 
       for (const key in components) {
-        const isMatchedToTitle = components[key].title.toLowerCase().match(searchValue);
+        const isMatchedToTitle = this.t(components[key].title).toLowerCase().match(searchValue);
         const isMatchedToKey = components[key].key.toLowerCase().match(searchValue);
 
         if (isMatchedToTitle || isMatchedToKey) {
@@ -696,34 +819,35 @@ export default class WebformBuilder extends Component {
 
     const filterGroupOrder = (groupOrder, searchValue) => {
       const result = _.cloneDeep(groupOrder);
-      return result.filter(key => filterGroupBy(this.groups[key], searchValue));
+      return result.filter((key) => filterGroupBy(this.groups[key], searchValue));
     };
 
     const filterSubgroups = (groups, searchValue) => {
       const result = _.clone(groups);
       return result
-            .map(subgroup => filterGroupBy(subgroup, searchValue))
-            .filter(subgroup => !_.isNull(subgroup));
+        .map((subgroup) => filterGroupBy(subgroup, searchValue))
+        .filter((subgroup) => !_.isNull(subgroup));
     };
 
-    const toTemplate = groupKey => {
+    const toTemplate = (groupKey) => {
       return {
         group: filterGroupBy(this.groups[groupKey], searchValue),
         groupKey,
         groupId: sidebar.id || sidebarGroups.id,
-        subgroups: filterSubgroups(this.groups[groupKey].subgroups, searchValue)
-                  .map((group) => this.renderTemplate('builderSidebarGroup', {
-                    group,
-                    groupKey: group.key,
-                    groupId: `group-container-${groupKey}`,
-                    subgroups: []
-                  })),
+        subgroups: filterSubgroups(this.groups[groupKey].subgroups, searchValue).map((group) =>
+          this.renderTemplate('builderSidebarGroup', {
+            group,
+            groupKey: group.key,
+            groupId: `group-container-${groupKey}`,
+            subgroups: [],
+          }),
+        ),
       };
     };
 
     sidebarGroups.innerHTML = filterGroupOrder(this.groupOrder, searchValue)
-                              .map(groupKey => this.renderTemplate('builderSidebarGroup', toTemplate(groupKey)))
-                              .join('');
+      .map((groupKey) => this.renderTemplate('builderSidebarGroup', toTemplate(groupKey)))
+      .join('');
 
     this.loadRefs(this.element, {
       'sidebar-groups': 'single',
@@ -735,7 +859,7 @@ export default class WebformBuilder extends Component {
     this.updateDragAndDrop();
 
     if (searchValue === '') {
-      this.triggerRedraw();
+      this.triggerRedraw?.();
     }
   }
 
@@ -744,10 +868,10 @@ export default class WebformBuilder extends Component {
     const isResource = groupInfo.key.indexOf('resource-') === 0;
     if (components) {
       groupInfo.componentOrder = Object.keys(components)
-        .map(key => components[key])
-        .filter(component => component && !component.ignore && !component.ignoreForForm)
+        .map((key) => components[key])
+        .filter((component) => component && !component.ignore && !component.ignoreForForm)
         .sort((a, b) => a.weight - b.weight)
-        .map(component => isResource ? `component-${component.key}` : component.key);
+        .map((component) => (isResource ? `component-${component.key}` : component.key));
     }
   }
 
@@ -767,38 +891,48 @@ export default class WebformBuilder extends Component {
       this.dragula.destroy();
     }
 
-    const containersArray = Array.prototype.slice.call(this.refs['sidebar-container']).filter(item => {
-      return item.id !== 'group-container-resource';
-    });
+    const containersArray = Array.prototype.slice
+      .call(this.refs['sidebar-container'])
+      .filter((item) => {
+        return item.id !== 'group-container-resource';
+      });
 
     if (!dragula) {
       return;
     }
 
+    // Pre-build a Set for O(1) disabled-key lookups instead of Array.includes() on every move check.
+    const disabledSet = new Set(options.disabled || []);
+
     this.dragula = dragula(containersArray, {
       moves(el) {
-        let moves = true;
-
-        const list = Array.from(el.classList).filter(item => item.indexOf('formio-component-') === 0);
-        list.forEach(item => {
-          const key = item.slice('formio-component-'.length);
-          if (options.disabled && options.disabled.includes(key)) {
-            moves = false;
-          }
-        });
-
         if (el.classList.contains('no-drag')) {
-          moves = false;
+          return false;
         }
-        return moves;
+        if (disabledSet.size === 0) {
+          return true;
+        }
+        const classList = el.classList;
+        for (let i = 0; i < classList.length; i++) {
+          const item = classList[i];
+          if (item.startsWith('formio-component-')) {
+            const key = item.slice('formio-component-'.length);
+            if (disabledSet.has(key)) {
+              return false;
+            }
+          }
+        }
+        return true;
       },
       copy(el) {
         return el.classList.contains('drag-copy');
       },
       accepts(el, target) {
         return !el.contains(target) && !target.classList.contains('no-drop');
-      }
-    }).on('drop', (element, target, source, sibling) => this.onDrop(element, target, source, sibling));
+      },
+    }).on('drop', (element, target, source, sibling) =>
+      this.onDrop(element, target, source, sibling),
+    );
   }
 
   detach() {
@@ -827,14 +961,13 @@ export default class WebformBuilder extends Component {
     // This is a new component
     else if (this.schemas.hasOwnProperty(key)) {
       info = fastCloneDeep(this.schemas[key]);
-    }
-    else if (this.groups.hasOwnProperty(group)) {
+    } else if (this.groups.hasOwnProperty(group)) {
       const groupComponents = this.groups[group].components;
       if (groupComponents.hasOwnProperty(key)) {
         info = fastCloneDeep(groupComponents[key].schema);
       }
-    }
-    else if (group === 'searchFields') {//Search components go into this group
+    } else if (group === 'searchFields') {
+      //Search components go into this group
       const resourceGroups = this.groups.resource.subgroups;
       for (let ix = 0; ix < resourceGroups.length; ix++) {
         const resourceGroup = resourceGroups[ix];
@@ -846,6 +979,10 @@ export default class WebformBuilder extends Component {
     }
 
     if (info) {
+      //if this is a custom component that was already assigned a key, don't stomp on it
+      if (!Components.components.hasOwnProperty(info.type) && info.key) {
+        return info;
+      }
       info.key = this.generateKey(info);
     }
 
@@ -861,23 +998,30 @@ export default class WebformBuilder extends Component {
     let tabIndex = 0;
     switch (parent.type) {
       case 'table':
-        tableRowIndex = _.findIndex(parent.rows, row => row.some(column => column.components.some(comp => comp.key === component.key)));
-        tableColumnIndex = _.findIndex(parent.rows[tableRowIndex], (column => column.components.some(comp => comp.key === component.key)));
+        tableRowIndex = _.findIndex(parent.rows, (row) =>
+          row.some((column) => column.components.some((comp) => comp.key === component.key)),
+        );
+        tableColumnIndex = _.findIndex(parent.rows[tableRowIndex], (column) =>
+          column.components.some((comp) => comp.key === component.key),
+        );
         path = `rows[${tableRowIndex}][${tableColumnIndex}].components`;
         break;
       case 'columns':
-        columnIndex = _.findIndex(parent.columns, column => column.components.some(comp => comp.key === component.key));
+        columnIndex = _.findIndex(parent.columns, (column) =>
+          column.components.some((comp) => comp.key === component.key),
+        );
         path = `columns[${columnIndex}].components`;
         break;
       case 'tabs':
-        tabIndex = _.findIndex(parent.components, tab => tab.components.some(comp => comp.key === component.key));
+        tabIndex = _.findIndex(parent.components, (tab) =>
+          tab.components.some((comp) => comp.key === component.key),
+        );
         path = `components[${tabIndex}].components`;
         break;
     }
     return path;
   }
 
-  /* eslint-disable max-statements */
   onDrop(element, target, source, sibling) {
     if (!target) {
       return;
@@ -900,13 +1044,13 @@ export default class WebformBuilder extends Component {
         info = this.getComponentInfo(type, group);
       }
       isNew = true;
-    }
-    else if (source.formioContainer) {
+    } else if (source.formioContainer) {
       index = _.findIndex(source.formioContainer, { key: element.formioComponent.component.key });
       if (index !== -1) {
         // Grab and remove the component from the source container.
         info = source.formioContainer.splice(
-          _.findIndex(source.formioContainer, { key: element.formioComponent.component.key }), 1
+          _.findIndex(source.formioContainer, { key: element.formioComponent.component.key }),
+          1,
         );
 
         // Since splice returns an array of one object, we need to destructure it.
@@ -920,35 +1064,49 @@ export default class WebformBuilder extends Component {
     }
 
     // Show an error if siblings are disabled for a component and such a component already exists.
-    const compKey = (group === 'resource') ? `component-${key}` : key;
+    const compKey = group === 'resource' ? `component-${key}` : key;
     const draggableComponent = this.groups[group]?.components[compKey] || {};
 
     if (draggableComponent.disableSiblings) {
       let isCompAlreadyExists = false;
-      eachComponent(this.webform.components, (component) => {
-        if (component.type === draggableComponent.schema.type) {
-          isCompAlreadyExists = true;
-          return;
-        }
-      }, true);
+      eachComponent(
+        this.webform.components,
+        (component) => {
+          if (component.type === draggableComponent.schema.type) {
+            isCompAlreadyExists = true;
+            return;
+          }
+        },
+        true,
+      );
       if (isCompAlreadyExists) {
         this.webform.redraw();
-        this.webform.setAlert('danger', `You cannot add more than one ${draggableComponent.key} component to one page.`);
+        this.webform.setAlert(
+          'danger',
+          `You cannot add more than one ${draggableComponent.key} component to one page.`,
+        );
         return;
       }
     }
 
     if (draggableComponent.uniqueComponent) {
       let isCompAlreadyExists = false;
-      eachComponent(this.webform.components, (component) => {
-        if (component.key === draggableComponent.schema.key) {
-          isCompAlreadyExists = true;
-          return;
-        }
-      }, true);
+      eachComponent(
+        this.webform.components,
+        (component) => {
+          if (component.key === draggableComponent.schema.key) {
+            isCompAlreadyExists = true;
+            return;
+          }
+        },
+        true,
+      );
       if (isCompAlreadyExists) {
         this.webform.redraw();
-        this.webform.setAlert('danger', `You cannot add more than one ${draggableComponent.title} component to one page.`);
+        this.webform.setAlert(
+          'danger',
+          `You cannot add more than one ${draggableComponent.title} component to one page.`,
+        );
         return;
       }
     }
@@ -964,17 +1122,17 @@ export default class WebformBuilder extends Component {
     if (target.formioContainer) {
       if (sibling) {
         if (!sibling.getAttribute('data-noattach')) {
-          index = _.findIndex(target.formioContainer, { key: _.get(sibling, 'formioComponent.component.key') });
-          index = (index === -1) ? 0 : index;
-        }
-        else {
+          index = _.findIndex(target.formioContainer, {
+            key: _.get(sibling, 'formioComponent.component.key'),
+          });
+          index = index === -1 ? 0 : index;
+        } else {
           index = sibling.getAttribute('data-position');
         }
         if (index !== -1) {
           target.formioContainer.splice(index, 0, info);
         }
-      }
-      else {
+      } else {
         target.formioContainer.push(info);
       }
       path = this.getComponentsPath(info, parent.component);
@@ -990,7 +1148,13 @@ export default class WebformBuilder extends Component {
 
     const componentInDataGrid = parent.type === 'datagrid';
 
-    if (isNew && !this.options.noNewEdit && !info.noNewEdit && !(this.options.design && info.type === 'reviewpage')) {
+    if (
+      isNew &&
+      !this.options.noNewEdit &&
+      !info.noNewEdit &&
+      this.hasEditTabs(info.type) &&
+      !(this.options.design && info.type === 'reviewpage')
+    ) {
       this.editComponent(info, target, isNew, null, null, { inDataGrid: componentInDataGrid });
     }
 
@@ -999,28 +1163,55 @@ export default class WebformBuilder extends Component {
     if (target !== source) {
       if (source.formioContainer && source.contains(target)) {
         rebuild = source.formioComponent.rebuild();
-      }
-      else if (target.contains(source)) {
+      } else if (target.contains(source)) {
         rebuild = target.formioComponent.rebuild();
-      }
-      else {
+      } else {
         if (source.formioContainer) {
-          rebuild = source.formioComponent.rebuild();
+          // Both source and target need rebuilding. Run them in parallel and wait for both.
+          // Previously the source rebuild was started and its promise discarded (overwritten),
+          // causing a race condition where source and target rebuilt concurrently with no coordination.
+          rebuild = Promise.all([
+            source.formioComponent.rebuild(),
+            target.formioComponent.rebuild(),
+          ]);
+        } else {
+          rebuild = target.formioComponent.rebuild();
         }
-        rebuild = target.formioComponent.rebuild();
       }
-    }
-    else {
+    } else {
       // If they are the same, only rebuild one.
       rebuild = target.formioComponent.rebuild();
     }
 
     if (!rebuild) {
-      rebuild = NativePromise.resolve();
+      rebuild = Promise.resolve();
     }
 
     return rebuild.then(() => {
-      this.emit('addComponent', info, parent, path, index, isNew && !this.options.noNewEdit && !info.noNewEdit);
+      // Get the updated `toIndex` after the component has been inserted/rebuilt
+      const toIndex = _.findIndex(target.formioContainer, { key: info.key });
+      this.emit(
+        'addComponent',
+        info,
+        parent,
+        path,
+        index,
+        isNew && !this.options.noNewEdit && !info.noNewEdit,
+      );
+      // If this is not a new component — it means it was moved
+      if (!isNew) {
+        const payload = {
+          component: info,
+          parent,
+          path,
+          fromIndex: index,
+          toIndex,
+          timestamp: new Date()
+        };
+        // New event that allows explicit tracking of reordering
+        this.emit('moveComponent', payload);
+      }
+    
       if (!isNew || this.options.noNewEdit || info.noNewEdit) {
         this.emit('change', this.form);
       }
@@ -1036,13 +1227,31 @@ export default class WebformBuilder extends Component {
       this.options.properties = form.properties;
     }
 
-    this.keyboardActionsEnabled = _.get(this.options, 'keyboardBuilder', false) || this.options.properties?.keyboardBuilder;
 
-    const isShowSubmitButton = !this.options.noDefaultSubmitButton
-      && !form.components.length;
+    let keyboardActionsEnabled =
+      _.get(this.options, 'keyboardBuilder', false) || this.options.properties?.keyboardBuilder;
+
+    if (typeof keyboardActionsEnabled === 'string') {
+      keyboardActionsEnabled = keyboardActionsEnabled === 'true';
+    }
+    this.keyboardActionsEnabled = keyboardActionsEnabled;
+
+
+    const { display, noAddSubmitButton, noDefaultSubmitButton } = this.options;
+    const { _id, components } = form;
+
+    const isSubmitButton = ({ type, action }) =>
+      type === 'button' && (action === 'submit' || !action);
+    const hasSubmitButton = components.some(isSubmitButton);
+    // Add submit button if form display was switched from wizard
+    // Don't add if there is noAddSubmitButton flag passed, or the form has id, or the form has a submit button already
+    const shouldAddSubmitButton =
+      (display === 'wizard' && !hasSubmitButton) ||
+      (!noAddSubmitButton && !_id && !hasSubmitButton);
+
 
     // Ensure there is at least a submit button.
-    if (isShowSubmitButton) {
+    if (!noDefaultSubmitButton && shouldAddSubmitButton) {
       form.components.push({
         type: 'button',
         label: 'Submit',
@@ -1051,13 +1260,14 @@ export default class WebformBuilder extends Component {
         block: false,
         action: 'submit',
         disableOnInvalid: true,
-        theme: 'primary'
+        theme: 'primary',
       });
     }
 
     if (this.webform) {
-      const shouldRebuild = !this.webform.form.components ||
-        (form.components.length !== this.webform.form.components.length);
+      const shouldRebuild =
+        !this.webform.form.components ||
+        form.components.length !== this.webform.form.components.length;
       return this.webform.setForm(form, { keepAsReference: true }).then(() => {
         if (this.refs.form) {
           this.builderHeight = this.refs.form.offsetHeight;
@@ -1068,14 +1278,14 @@ export default class WebformBuilder extends Component {
         return this.rebuild().then(() => this.form);
       });
     }
-    return NativePromise.resolve(form);
+    return Promise.resolve(form);
   }
 
   populateCaptchaSettings(form) {
     //populate isEnabled for captcha form settings
     let isCaptchaEnabled = false;
     if (this.form.components) {
-      eachComponent(form.components, component => {
+      eachComponent(form.components, (component) => {
         if (isCaptchaEnabled) {
           return;
         }
@@ -1086,8 +1296,7 @@ export default class WebformBuilder extends Component {
       });
       if (isCaptchaEnabled) {
         _.set(form, 'settings.captcha.isEnabled', true);
-      }
-      else if (_.get(form, 'settings.captcha.isEnabled')) {
+      } else if (_.get(form, 'settings.captcha.isEnabled')) {
         _.set(form, 'settings.captcha.isEnabled', false);
       }
     }
@@ -1098,15 +1307,15 @@ export default class WebformBuilder extends Component {
       return;
     }
     let remove = true;
-    const removingComponentsGroup = !component.skipRemoveConfirm &&
-      (
-        (Array.isArray(component.components) && component.components.length) ||
+    const removingComponentsGroup =
+      !component.skipRemoveConfirm &&
+      ((Array.isArray(component.components) && component.components.length) ||
         (Array.isArray(component.rows) && component.rows.length) ||
-        (Array.isArray(component.columns) && component.columns.length)
-      );
+        (Array.isArray(component.columns) && component.columns.length));
 
     if (this.options.alwaysConfirmComponentRemoval || removingComponentsGroup) {
-      const message = removingComponentsGroup ? 'Removing this component will also remove all of its children. Are you sure you want to do this?'
+      const message = removingComponentsGroup
+        ? 'Removing this component will also remove all of its children. Are you sure you want to do this?'
         : 'Are you sure you want to remove this component?';
       remove = window.confirm(this.t(message));
     }
@@ -1118,14 +1327,18 @@ export default class WebformBuilder extends Component {
       const path = this.getComponentsPath(component, parent.formioComponent.component);
       if (parent.formioContainer) {
         parent.formioContainer.splice(index, 1);
-      }
-      else if (parent.formioComponent && parent.formioComponent.removeChildComponent) {
+      } else if (parent.formioComponent && parent.formioComponent.removeChildComponent) {
         parent.formioComponent.removeChildComponent(component);
       }
-      if (component.input && componentInstance && componentInstance.parent) {
-        _.unset(componentInstance._data, componentInstance.key);
+      if (component.input && componentInstance && parent.formioComponent) {
+        const parentDefaultValue = _.get(parent.formioComponent, 'component.defaultValue', null);
+        if (Array.isArray(parentDefaultValue)) {
+          parentDefaultValue.forEach((v) => _.unset(v, componentInstance.key));
+        } else if (typeof parentDefaultValue === 'object') {
+          _.unset(parentDefaultValue, componentInstance.key);
+        }
       }
-      const rebuild = parent.formioComponent.rebuild() || NativePromise.resolve();
+      const rebuild = parent.formioComponent.rebuild() || Promise.resolve();
       rebuild.then(() => {
         this.emit('removeComponent', component, parent.formioComponent.schema, path, index);
         this.emit('change', this.form);
@@ -1146,27 +1359,47 @@ export default class WebformBuilder extends Component {
   }
 
   updateComponent(component, changed) {
-    const sanitizeConfig = _.get(this.webform, 'form.settings.sanitizeConfig') || _.get(this.webform, 'form.globalSettings.sanitizeConfig');
+    const sanitizeConfig =
+      _.get(this.webform, 'form.settings.sanitizeConfig') ||
+      _.get(this.webform, 'form.globalSettings.sanitizeConfig');
     // Update the preview.
     if (this.preview) {
+      if (changed?.instance?.key === 'allowMultipleMasks' && changed?.value === false) {
+        const changedComp = this.preview?.getComponent(component.key);
+        if (changedComp) {
+          const emptyValue = changedComp.emptyValue;
+          changedComp.dataValue = emptyValue;
+          component.defaultValue = emptyValue;
+        }
+      }
+      
       this.preview.form = {
-        components: [_.omit({ ...component }, [
-          'hidden',
-          'conditional',
-          'calculateValue',
-          'logic',
-          'autofocus',
-          'customConditional',
-        ])],
+        components: [
+          _.omit({ ...component }, [
+            'hidden',
+            'conditional',
+            'calculateValue',
+            'logic',
+            'autofocus',
+            'customConditional',
+          ]),
+        ],
         config: this.options.formConfig || {},
         sanitizeConfig,
       };
 
-      const fieldsToRemoveDoubleQuotes = ['label', 'tooltip'];
+      const fieldsToRemoveDoubleQuotes = [
+        'label',
+        'tooltip',
+      ];
 
-      this.preview.form.components.forEach(component => this.replaceDoubleQuotes(component, fieldsToRemoveDoubleQuotes));
+      this.preview.form.components.forEach((component) =>
+        this.replaceDoubleQuotes(component, fieldsToRemoveDoubleQuotes),
+      );
 
-      const previewElement = this.componentEdit.querySelector('[ref="preview"]');
+      const previewElement = this.componentEdit.querySelector(
+        `[${this._referenceAttributeName}="preview"]`,
+      );
       if (previewElement) {
         this.setContent(previewElement, this.preview.render(), null, sanitizeConfig);
         this.preview.attach(previewElement);
@@ -1176,31 +1409,53 @@ export default class WebformBuilder extends Component {
     // Change the "default value" field to be reflective of this component.
     const defaultValueComponent = getComponent(this.editForm.components, 'defaultValue', true);
     if (defaultValueComponent && component.type !== 'hidden') {
-      const defaultChanged = changed && (
-        (changed.component && changed.component.key === 'defaultValue')
-        || (changed.instance && defaultValueComponent.hasComponent && defaultValueComponent.hasComponent(changed.instance))
-      );
+      const defaultChanged =
+        changed &&
+        ((changed.component && changed.component.key === 'defaultValue') ||
+          (changed.instance &&
+            defaultValueComponent.hasComponent &&
+            defaultValueComponent.hasComponent(changed.instance)));
 
       if (!defaultChanged) {
-        _.assign(defaultValueComponent.component, _.omit({ ...component }, [
-          'key',
-          'label',
-          'labelPosition',
-          'labelMargin',
-          'labelWidth',
-          'placeholder',
-          'tooltip',
-          'hidden',
-          'autofocus',
-          'validate',
-          'disabled',
-          'defaultValue',
-          'customDefaultValue',
-          'calculateValue',
-          'conditional',
-          'customConditional',
-          'id'
-        ]));
+
+        _.assign(
+          defaultValueComponent.component,
+          _.omit({ ...component }, [
+            'key',
+            'label',
+            'labelPosition',
+            'labelMargin',
+            'labelWidth',
+            'placeholder',
+            'tooltip',
+            'hidden',
+            'autofocus',
+            'validate',
+            'disabled',
+            'defaultValue',
+            'customDefaultValue',
+            'calculateValue',
+            'conditional',
+            'customConditional',
+            'id',
+            'logic',
+            'fields.day.required',
+            'fields.month.required',
+            'fields.year.required',
+          ]),
+        );
+        if (defaultValueComponent.component.components) {
+          if (!this.originalDefaultValue) {
+            this.originalDefaultValue = fastCloneDeep(defaultValueComponent.component);
+          }
+
+          eachComponent(defaultValueComponent.component.components, (comp) => {
+            if (comp.validate?.required) {
+              comp.validate.required = false;
+            }
+          });
+        }
+
         const parentComponent = defaultValueComponent.parent;
         let tabIndex = -1;
         let index = -1;
@@ -1218,14 +1473,23 @@ export default class WebformBuilder extends Component {
         if (tabIndex !== -1 && index !== -1 && changed && !_.isNil(changed.value)) {
           const sibling = parentComponent.tabs[tabIndex][index + 1];
           parentComponent.removeComponent(defaultValueComponent);
-          const newComp = parentComponent.addComponent(defaultValueComponent.component, defaultValueComponent.data, sibling);
+          const newComp = parentComponent.addComponent(
+            defaultValueComponent.component,
+            defaultValueComponent.data,
+            sibling,
+          );
           _.pull(newComp.validators, 'required');
           parentComponent.tabs[tabIndex].splice(index, 1, newComp);
-          newComp.checkValidity = () => true;
+          newComp.processOwnValidation = true;
           newComp.build(defaultValueComponent.element);
+          if (this.preview && !this.preview.defaultChanged) {
+            const defaultValue = _.get(this.preview._data, this.editForm._data.key);
+            if (_.isObject(defaultValue) && !_.isArray(defaultValue)) {
+              this.editForm._data.defaultValue = defaultValue;
+            }
+          }
         }
-      }
-      else {
+      } else {
         let dataPath = changed.instance._data.key;
 
         const path = getArrayFromComponentPath(changed.instance.path);
@@ -1236,6 +1500,7 @@ export default class WebformBuilder extends Component {
           dataPath = getStringFromComponentPath(path);
         }
 
+        this.preview.defaultChanged = true;
         _.set(this.preview._data, dataPath, changed.value);
         _.set(this.webform._data, dataPath, changed.value);
       }
@@ -1245,43 +1510,55 @@ export default class WebformBuilder extends Component {
     this.emit('updateComponent', component);
   }
 
-  findRepeatablePaths() {
-    const repeatablePaths = [];
+  findComponentsWithRepeatablePaths() {
+    const repeatablePaths = {};
     const keys = new Map();
-
-    eachComponent(this.form.components, (comp, path) => {
-      if (!comp.key) {
-        return;
-      }
-
-      if (keys.has(comp.key)) {
-        if (keys.get(comp.key).includes(path)) {
-          repeatablePaths.push(path);
+    eachComponent(
+      this.form.components,
+      (comp, path, components, parent, paths) => {
+        const isRadioCheckbox = comp.type === 'checkbox' && comp.inputType === 'radio';
+        const isLayout = componentInfo(comp).layout;
+        if (!isLayout) {
+          if (keys.has(paths.dataPath)) {
+            const onlyRadioCheckboxes =
+              repeatablePaths[paths.dataPath]?.onlyRadioCheckboxes === false
+                ? false
+                : isRadioCheckbox;
+            repeatablePaths[paths.dataPath] = {
+              comps: [
+                ...(repeatablePaths[paths.dataPath]?.comps || []),
+                keys.get(paths.dataPath),
+                comp,
+              ],
+              onlyRadioCheckboxes,
+            };
+          } else {
+            keys.set(paths.dataPath, comp);
+          }
         }
-        else {
-          keys.set(comp.key, [...keys.get(comp.key), path]);
-        }
+      },
+      true,
+    );
+    const componentsWithRepeatablePaths = [];
+    Object.keys(repeatablePaths).forEach((path) => {
+      const { comps, onlyRadioCheckboxes } = repeatablePaths[path];
+      if (!onlyRadioCheckboxes) {
+        componentsWithRepeatablePaths.push(...comps);
       }
-      else {
-        keys.set(comp.key, [path]);
-      }
-    }, true);
-
-    return repeatablePaths;
+    });
+    return componentsWithRepeatablePaths;
   }
 
   highlightInvalidComponents() {
-    const repeatablePaths = this.findRepeatablePaths();
+    const repeatablePathsComps = this.findComponentsWithRepeatablePaths();
     let hasInvalidComponents = false;
 
     this.webform.everyComponent((comp) => {
-      const path = comp.path;
-      if (repeatablePaths.includes(path)) {
-        comp.setCustomValidity(`API Key is not unique: ${comp.key}`);
+      if (repeatablePathsComps.includes(comp.component)) {
+        comp.setCustomValidity(this.t('apiKey', { key: comp.key }));
         hasInvalidComponents = true;
-      }
-      else if (comp.error?.message?.startsWith('API Key is not unique')) {
-        comp.setCustomValidity('');
+      } else {
+        comp.setCustomValidity();
       }
     });
 
@@ -1290,17 +1567,20 @@ export default class WebformBuilder extends Component {
 
   /**
    * Called when a new component is saved.
-   *
-   * @param parent
-   * @param component
-   * @return {boolean}
+   * @param {Component} component - The component instance to save.
+   * @param {Component} parent - The parent component.
+   * @param {boolean} isNew - If this is a new component.
+   * @param {Component} original - The original component.
+   * @returns {boolean} - If the component was saved.
    */
   saveComponent(component, parent, isNew, original) {
     this.editForm.detach();
     const parentContainer = parent ? parent.formioContainer : this.container;
     const parentComponent = parent ? parent.formioComponent : this;
     this.dialog.close();
-    const path = parentContainer ? this.getComponentsPath(component, parentComponent.component) : '';
+    const path = parentContainer
+      ? this.getComponentsPath(component, parentComponent.component)
+      : '';
     if (!original) {
       original = parent.formioContainer.find((comp) => comp.id === component.id);
     }
@@ -1308,7 +1588,14 @@ export default class WebformBuilder extends Component {
     if (index !== -1) {
       let submissionData = this.editForm.submission.data;
       submissionData = submissionData.componentJson || submissionData;
-      const fieldsToRemoveDoubleQuotes = ['label', 'tooltip'];
+      if (submissionData.components && this.originalDefaultValue) {
+        submissionData.components = this.originalDefaultValue.components;
+        this.originalDefaultValue = null;
+      }
+      const fieldsToRemoveDoubleQuotes = [
+        'label',
+        'tooltip',
+      ];
 
       this.replaceDoubleQuotes(submissionData, fieldsToRemoveDoubleQuotes);
 
@@ -1320,9 +1607,8 @@ export default class WebformBuilder extends Component {
           comp = component;
         }
       });
-      const originalComp = comp.component;
-      const originalComponentSchema = comp.schema;
-
+      const originalComp = comp?.component;
+      const originalComponentSchema = comp?.schema;
       const isParentSaveChildMethod = this.isParentSaveChildMethod(parent.formioComponent);
 
       if (parentContainer && !isParentSaveChildMethod) {
@@ -1330,14 +1616,14 @@ export default class WebformBuilder extends Component {
         if (comp) {
           comp.component = submissionData;
         }
-      }
-      else if (isParentSaveChildMethod) {
+      } else if (isParentSaveChildMethod) {
         parent.formioComponent.saveChildComponent(submissionData);
       }
 
-      const rebuild = parentComponent.rebuild() || NativePromise.resolve();
+      const rebuild = parentComponent.rebuild() || Promise.resolve();
       return rebuild.then(() => {
-        const schema = parentContainer ? parentContainer[index] : (comp ? comp.schema : []);
+        parentComponent.resetValue();
+        const schema = parentContainer ? parentContainer[index] : comp ? comp.schema : [];
         this.emitSaveComponentEvent(
           schema,
           originalComp,
@@ -1345,7 +1631,7 @@ export default class WebformBuilder extends Component {
           path,
           index,
           isNew,
-          originalComponentSchema
+          originalComponentSchema,
         );
         this.emit('change', this.form);
         this.highlightInvalidComponents();
@@ -1359,23 +1645,34 @@ export default class WebformBuilder extends Component {
     }
 
     this.highlightInvalidComponents();
-    return NativePromise.resolve();
+    return Promise.resolve();
   }
 
-  emitSaveComponentEvent(schema, originalComp, parentComponentSchema, path, index, isNew, originalComponentSchema) {
-    this.emit('saveComponent',
+  emitSaveComponentEvent(
+    schema,
+    originalComp,
+    parentComponentSchema,
+    path,
+    index,
+    isNew,
+    originalComponentSchema,
+  ) {
+    this.emit(
+      'saveComponent',
       schema,
       originalComp,
       parentComponentSchema,
       path,
       index,
       isNew,
-      originalComponentSchema
+      originalComponentSchema,
     );
   }
 
   attachEditComponentControls(component, parent, isNew, original, ComponentClass) {
-    const cancelButtons = this.componentEdit.querySelectorAll('[ref="cancelButton"]');
+    const cancelButtons = this.componentEdit.querySelectorAll(
+      `[${this._referenceAttributeName}="cancelButton"]`,
+    );
     cancelButtons.forEach((cancelButton) => {
       this.editForm.addEventListener(cancelButton, 'click', (event) => {
         event.preventDefault();
@@ -1386,7 +1683,9 @@ export default class WebformBuilder extends Component {
       });
     });
 
-    const removeButtons = this.componentEdit.querySelectorAll('[ref="removeButton"]');
+    const removeButtons = this.componentEdit.querySelectorAll(
+      `[${this._referenceAttributeName}="removeButton"]`,
+    );
     removeButtons.forEach((removeButton) => {
       this.editForm.addEventListener(removeButton, 'click', (event) => {
         event.preventDefault();
@@ -1399,13 +1698,18 @@ export default class WebformBuilder extends Component {
       });
     });
 
-    const saveButtons = this.componentEdit.querySelectorAll('[ref="saveButton"]');
+    const saveButtons = this.componentEdit.querySelectorAll(
+      `[${this._referenceAttributeName}="saveButton"]`,
+    );
     saveButtons.forEach((saveButton) => {
       this.editForm.addEventListener(saveButton, 'click', (event) => {
         event.preventDefault();
-        if (!this.editForm.checkValidity(this.editForm.data, true, this.editForm.data)) {
+        const errors = this.editForm.validate(this.editForm.data, {
+          dirty: true,
+        });
+        if (errors.length) {
           this.editForm.setPristine(false);
-          this.editForm.showErrors();
+          this.editForm.showErrors(errors);
           return false;
         }
         this.saved = true;
@@ -1413,20 +1717,31 @@ export default class WebformBuilder extends Component {
       });
     });
 
-    const previewButtons = this.componentEdit.querySelectorAll('[ref="previewButton"]');
+    const previewButtons = this.componentEdit.querySelectorAll(
+      `[${this._referenceAttributeName}="previewButton"]`,
+    );
     previewButtons.forEach((previewButton) => {
       this.editForm.addEventListener(previewButton, 'click', (event) => {
         event.preventDefault();
         this.showPreview = !this.showPreview;
         this.editForm.detach();
-        this.setContent(this.componentEdit, this.renderTemplate('builderEditForm', {
-          componentInfo: ComponentClass.builderInfo,
-          editForm: this.editForm.render(),
-          preview: this.preview ? this.preview.render() : false,
-          showPreview: this.showPreview,
-          helplinks: this.helplinks,
-        }));
-        this.editForm.attach(this.componentEdit.querySelector('[ref="editForm"]'));
+
+        this.setContent(
+          this.componentEdit,
+          this.renderTemplate('builderEditForm', {
+            componentInfo: ComponentClass.builderInfo,
+            editForm: this.editForm.render(),
+            preview: this.preview ? this.preview.render() : false,
+            showPreview: this.showPreview,
+            helplinks: this.helplinks,
+          }),
+        );
+        this.editForm.attach(
+          this.componentEdit.querySelector(`[${this._referenceAttributeName}="editForm"]`),
+        );
+        const editFormData = this.editForm.submission?.data;
+        this.updateComponent(editFormData?.componentJson || editFormData || component);
+
         this.attachEditComponentControls(component, parent, isNew, original, ComponentClass);
       });
     });
@@ -1460,39 +1775,51 @@ export default class WebformBuilder extends Component {
     // Pass along the form being edited.
     editFormOptions.editForm = this.form;
     editFormOptions.editComponent = component;
+    editFormOptions.editComponentPath = flags.editComponentPath;
     editFormOptions.flags = flags;
 
     this.hook('editComponentParentInstance', editFormOptions, parent);
 
-    this.editForm = new Webform(
-      {
-        ..._.omit(this.options, ['hooks', 'builder', 'events', 'attachMode', 'skipInit']),
-        language: this.options.language,
-        ...editFormOptions
-      }
-    );
+    this.editForm = new Webform({
+      ..._.omit(this.options, [
+        'hooks',
+        'builder',
+        'events',
+        'attachMode',
+        'skipInit',
+      ]),
+      language: this.options.language,
+      ...editFormOptions,
+      evalContext: {
+        ...(editFormOptions?.evalContext || this.options?.evalContext || {}),
+        buildingForm: this.form,
+      },
+    });
 
     this.hook('editFormProperties', parent);
 
-    this.editForm.form = (isJsonEdit && !isCustom) ? {
-      components: [
-        {
-          type: 'textarea',
-          as: 'json',
-          editor: 'ace',
-          weight: 10,
-          input: true,
-          key: 'componentJson',
-          label: 'Component JSON',
-          tooltip: 'Edit the JSON for this component.'
-        },
-        {
-          type: 'checkbox',
-          key: 'showFullSchema',
-          label: 'Full Schema'
-        }
-      ]
-    } : ComponentClass.editForm(_.cloneDeep(overrides));
+    this.editForm.form =
+      isJsonEdit && !isCustom
+        ? {
+            components: [
+              {
+                type: 'textarea',
+                as: 'json',
+                editor: 'ace',
+                weight: 10,
+                input: true,
+                key: 'componentJson',
+                label: 'Component JSON',
+                tooltip: 'Edit the JSON for this component.',
+              },
+              {
+                type: 'checkbox',
+                key: 'showFullSchema',
+                label: 'Full Schema',
+              },
+            ],
+          }
+        : ComponentClass.editForm(_.cloneDeep(overrides));
     const instanceOptions = {
       inFormBuilder: true,
     };
@@ -1502,45 +1829,57 @@ export default class WebformBuilder extends Component {
     const instance = new ComponentClass(componentCopy, instanceOptions);
     const schema = this.hook('builderComponentSchema', component, instance);
 
-    this.editForm.submission = isJsonEdit ? {
-      data: {
-        componentJson: schema,
-        showFullSchema: this.options.showFullJsonSchema
-      },
-    } : {
-        data: instance.component,
-      };
+    this.editForm.submission = isJsonEdit
+      ? {
+          data: {
+            componentJson: schema,
+            showFullSchema: this.options.showFullJsonSchema,
+          },
+        }
+      : {
+          data: instance.component,
+        };
 
     if (this.preview) {
       this.preview.destroy();
     }
-    if (!ComponentClass.builderInfo.hasOwnProperty('preview') || ComponentClass.builderInfo.preview) {
-      this.preview = new Webform(_.omit({ ...this.options, preview: true }, [
-        'hooks',
-        'builder',
-        'events',
-        'attachMode',
-        'calculateValue'
-      ]));
+    if (
+      !ComponentClass.builderInfo.hasOwnProperty('preview') ||
+      ComponentClass.builderInfo.preview
+    ) {
+      this.preview = new Webform(
+        _.omit({ ...this.options, preview: true }, [
+          'hooks',
+          'builder',
+          'events',
+          'attachMode',
+          'calculateValue',
+        ]),
+      );
 
       this.hook('previewFormSettitngs', schema, isJsonEdit);
     }
 
     this.showPreview = ComponentClass.builderInfo.showPreview ?? true;
 
-    this.componentEdit = this.ce('div', { 'class': 'component-edit-container' });
-    this.setContent(this.componentEdit, this.renderTemplate('builderEditForm', {
-      componentInfo: ComponentClass.builderInfo,
-      editForm: this.editForm.render(),
-      preview: this.preview ? this.preview.render() : false,
-      showPreview: this.showPreview,
-      helplinks: this.helplinks
-    }));
+    this.componentEdit = this.ce('div', { class: 'component-edit-container' });
+    this.setContent(
+      this.componentEdit,
+      this.renderTemplate('builderEditForm', {
+        componentInfo: ComponentClass.builderInfo,
+        editForm: this.editForm.render(),
+        preview: this.preview ? this.preview.render() : false,
+        showPreview: this.showPreview,
+        helplinks: this.helplinks,
+      }),
+    );
 
     this.dialog = this.createModal(this.componentEdit, _.get(this.options, 'dialogAttr', {}));
 
     // This is the attach step.
-    this.editForm.attach(this.componentEdit.querySelector('[ref="editForm"]'));
+    this.editForm.attach(
+      this.componentEdit.querySelector(`[${this._referenceAttributeName}="editForm"]`),
+    );
 
     this.hook('editFormWrapper');
 
@@ -1553,29 +1892,34 @@ export default class WebformBuilder extends Component {
           this.editForm.submission = {
             data: {
               componentJson: value ? instance.component : component,
-              showFullSchema: value
+              showFullSchema: value,
             },
           };
           return;
         }
         // See if this is a manually modified key. Treat custom component keys as manually modified
-        if ((event.changed.component && (event.changed.component.key === 'key')) || isJsonEdit) {
+        if ((event.changed.component && event.changed.component.key === 'key') || isJsonEdit) {
           componentCopy.keyModified = true;
         }
 
         let isComponentLabelChanged = false;
         if (event.changed.instance) {
-          isComponentLabelChanged = ['label', 'title'].includes(event.changed.instance.path);
-        }
-        else if (event.changed.component) {
-          isComponentLabelChanged = ['label', 'title'].includes(event.changed.component.key);
+          isComponentLabelChanged = [
+            'label',
+            'title',
+          ].includes(event.changed.instance.path);
+        } else if (event.changed.component) {
+          isComponentLabelChanged = [
+            'label',
+            'title',
+          ].includes(event.changed.component.key);
         }
 
         if (isComponentLabelChanged) {
           // Ensure this component has a key.
           if (isNew) {
             if (!event.data.keyModified) {
-              this.editForm.everyComponent(component => {
+              this.editForm.everyComponent((component) => {
                 if (component.key === 'key' && component.parent.component.key === 'tabs') {
                   component.setValue(this.updateComponentKey(event.data));
                   return false;
@@ -1586,7 +1930,9 @@ export default class WebformBuilder extends Component {
             if (this.form) {
               let formComponents = this.findNamespaceRoot(parent.formioComponent);
               // excluding component which key uniqueness is to be checked to prevent the comparing of the same keys
-              formComponents = formComponents.filter(comp => editFormOptions.editComponent.id !== comp.id);
+              formComponents = formComponents.filter(
+                (comp) => editFormOptions.editComponent.id !== comp.id,
+              );
 
               // Set a unique key for this component.
               BuilderUtils.uniquify(formComponents, event.data);
@@ -1594,8 +1940,19 @@ export default class WebformBuilder extends Component {
           }
         }
 
+        // If the edit form has any nested form inside, we get a partial data (nested form's data) in the
+        // event.data property
+        let editFormData;
+        if (
+          event.changed.instance &&
+          event.changed.instance.root &&
+          event.changed.instance.root.id !== this.editForm.id
+        ) {
+          editFormData = this.editForm.data;
+        }
+
         // Update the component.
-        this.updateComponent(event.data.componentJson || event.data, event.changed);
+        this.updateComponent(event.data.componentJson || editFormData || event.data, event.changed);
       }
     });
 
@@ -1622,12 +1979,10 @@ export default class WebformBuilder extends Component {
   }
 
   updateComponentKey(data) {
-    return _.camelCase(
-      data.title ||
-      data.label ||
-      data.placeholder ||
-      data.type
-    ).replace(/^[0-9]*/, '');
+    return _.camelCase(data.title || data.label || data.placeholder || data.type).replace(
+      /^[0-9]*/,
+      '',
+    );
   }
 
   moveComponent(component) {
@@ -1682,7 +2037,8 @@ export default class WebformBuilder extends Component {
 
         if (index !== -1) {
           info = source.formioContainer.splice(
-            _.findIndex(source.formioContainer, { key: element.formioComponent.component.key }), 1
+            _.findIndex(source.formioContainer, { key: element.formioComponent.component.key }),
+            1,
           );
           info = info[0];
           source.removeChild(element);
@@ -1690,26 +2046,24 @@ export default class WebformBuilder extends Component {
       }
 
       const len = source.formioComponent.components.length;
-        index = (index === -1) ? 0 : index + step;
+      index = index === -1 ? 0 : index + step;
 
-        if (index === -1) {
-          source.formioContainer.push(info);
-          source.appendChild(element);
-        }
-        else if (index === len) {
-          const key = source.formioContainer[0].key;
-          index = _.findIndex(source.formioComponent.components, { key: key });
-          const firstElement = source.formioComponent.components[index].element;
-          source.formioContainer.splice(0, 0, info);
-          source.insertBefore(element, firstElement);
-        }
-        else if (index !== -1) {
-          source.formioContainer.splice(index, 0, info);
-          direction
+      if (index === -1) {
+        source.formioContainer.push(info);
+        source.appendChild(element);
+      } else if (index === len) {
+        const key = source.formioContainer[0].key;
+        index = _.findIndex(source.formioComponent.components, { key: key });
+        const firstElement = source.formioComponent.components[index].element;
+        source.formioContainer.splice(0, 0, info);
+        source.insertBefore(element, firstElement);
+      } else if (index !== -1) {
+        source.formioContainer.splice(index, 0, info);
+        direction
           ? source.insertBefore(element, sibling)
           : source.insertBefore(element, sibling.nextElementSibling);
-        }
-        element.focus();
+      }
+      element.focus();
     }
   }
 
@@ -1741,8 +2095,7 @@ export default class WebformBuilder extends Component {
 
     if (firstComponent) {
       source.formioContainer.splice(0, 0, info);
-    }
-    else {
+    } else {
       source.formioContainer.push(info);
     }
 
@@ -1753,8 +2106,8 @@ export default class WebformBuilder extends Component {
 
   /**
    * Creates copy of component schema and stores it under sessionStorage.
-   * @param {Component} component
-   * @return {*}
+   * @param {Component} component - The component to copy.
+   * @returns {void}
    */
   copyComponent(component) {
     if (!window.sessionStorage) {
@@ -1766,8 +2119,8 @@ export default class WebformBuilder extends Component {
 
   /**
    * Paste copied component after the current component.
-   * @param {Component} component
-   * @return {*}
+   * @param {Component} component - The component to paste after.
+   * @returns {void}
    */
   pasteComponent(component) {
     if (!window.sessionStorage) {
@@ -1790,13 +2143,20 @@ export default class WebformBuilder extends Component {
             index = parent.formioContainer.indexOf(component.component);
             path = this.getComponentsPath(schema, parent.formioComponent.component);
             parent.formioContainer.splice(index + 1, 0, schema);
-          }
-          else if (isParentSaveChildMethod) {
+          } else if (isParentSaveChildMethod) {
             parent.formioComponent.saveChildComponent(schema, false);
           }
           parent.formioComponent.rebuild();
 
-          this.emitSaveComponentEvent(schema, schema, parent.formioComponent.component, path, (index + 1), true, schema);
+          this.emitSaveComponentEvent(
+            schema,
+            schema,
+            parent.formioComponent.component,
+            path,
+            index + 1,
+            true,
+            schema,
+          );
         }
         this.emit('change', this.form);
       }
@@ -1841,20 +2201,19 @@ export default class WebformBuilder extends Component {
     }
   }
 
-  destroy(deleteFromGlobal) {
+  destroy(all = false) {
     if (this.webform.initialized) {
-      this.webform.destroy(deleteFromGlobal);
+      this.webform.destroy(all);
     }
-    super.destroy(deleteFromGlobal);
+    super.destroy(all);
   }
 
   addBuilderGroup(name, group) {
     if (!this.groups[name]) {
       this.groups[name] = group;
       this.groupOrder.push(name);
-      this.triggerRedraw();
-    }
-    else {
+      this.triggerRedraw?.();
+    } else {
       this.updateBuilderGroup(name, group);
     }
   }
@@ -1862,16 +2221,25 @@ export default class WebformBuilder extends Component {
   updateBuilderGroup(name, group) {
     if (this.groups[name]) {
       this.groups[name] = group;
-      this.triggerRedraw();
+      this.triggerRedraw?.();
     }
   }
 
   generateKey(info) {
-    return info.key || _.camelCase(
-      info.title ||
-      info.label ||
-      info.placeholder ||
-      info.type
-    );
+    return info.key || _.camelCase(info.title || info.label || info.placeholder || info.type);
+  }
+
+  hasEditTabs(type) {
+    // If the component type does not exist then it has no edit tabs
+    if (!Components.components[type === 'custom' ? 'unknown' : type]) {
+      return false;
+    }
+    const editTabs = getComponent(
+      Components.components[type === 'custom' ? 'unknown' : type].editForm().components,
+      'tabs',
+      true,
+    ).components;
+    const hiddenEditTabs = _.filter(_.get(this.options, `editForm.${type}`, []), 'ignore');
+    return _.intersectionBy(editTabs, hiddenEditTabs, 'key').length !== editTabs.length;
   }
 }
